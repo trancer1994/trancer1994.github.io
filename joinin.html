@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Connecting Worlds — Join In!</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 0.7rem 1rem;
+      background: #222;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.95rem;
+    }
+
+    header nav a {
+      color: #fff;
+      text-decoration: none;
+      margin-right: 1rem;
+    }
+
+    header nav a:last-child {
+      margin-right: 0;
+    }
+
+    #status {
+      font-size: 0.85rem;
+      opacity: 0.85;
+    }
+
+    #app {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+
+    #sidebar {
+      width: 260px;
+      background: #f5f5f5;
+      border-right: 1px solid #ccc;
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      overflow-y: auto;
+    }
+
+    #sidebar h2 {
+      font-size: 1rem;
+      margin: 0 0 0.25rem 0;
+    }
+
+    #sidebar ul {
+      list-style: none;
+      padding-left: 0;
+      margin: 0;
+      font-size: 0.9rem;
+    }
+
+    #sidebar li {
+      padding: 0.2rem 0.3rem;
+      cursor: pointer;
+    }
+
+    #sidebar li:hover {
+      background: #e0e0e0;
+    }
+
+    #sidebar button {
+      width: 100%;
+      margin-top: 0.25rem;
+      padding: 0.4rem;
+      font-size: 0.9rem;
+    }
+
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    #chat {
+      flex: 1;
+      padding: 0.75rem;
+      overflow-y: auto;
+      border-bottom: 1px solid #ccc;
+      background: #fafafa;
+      font-size: 0.95rem;
+    }
+
+    #chat p {
+      margin: 0.2rem 0;
+    }
+
+    #input-area {
+      padding: 0.75rem;
+      display: flex;
+      gap: 0.5rem;
+      background: #f0f0f0;
+    }
+
+    #chat-input {
+      flex: 1;
+      padding: 0.5rem;
+      font-size: 0.95rem;
+    }
+
+    #send-btn {
+      padding: 0.5rem 0.9rem;
+      font-size: 0.95rem;
+    }
+
+    #connect-btn {
+      padding: 0.3rem 0.6rem;
+      font-size: 0.9rem;
+    }
+
+    #aac-note {
+      font-size: 0.8rem;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <div>
+    <strong>Connecting Worlds</strong> — Join In!
+  </div>
+  <div>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="vision.html">Vision</a>
+      <a href="about.html">About</a>
+    </nav>
+  </div>
+  <div>
+    <button id="connect-btn">Connect</button>
+    <span id="status">Not connected</span>
+  </div>
+</header>
+
+<div id="app">
+  <div id="sidebar">
+    <section>
+      <h2>Channels</h2>
+      <ul id="channel-list">
+        <li>[Root]</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Users</h2>
+      <ul id="user-list">
+        <li>[No users yet]</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Speak</h2>
+      <button id="speak-btn">Speak text</button>
+      <button id="stop-speak-btn">Stop speech</button>
+    </section>
+
+    <section>
+      <h2>AAC Bridge</h2>
+      <button id="speech-to-text-btn">Speech → Text</button>
+      <p id="aac-note">
+        You can paste AAC output into the chat box.<br>
+        Pasted text will be logged in the console for now.
+      </p>
+    </section>
+  </div>
+
+  <div id="main">
+    <div id="chat">
+      <p>[Connecting Worlds web client shell]</p>
+      <p>This chat will later show real TeamTalk messages.</p>
+    </div>
+
+    <div id="input-area">
+      <input id="chat-input" type="text" placeholder="Type your message…">
+      <button id="send-btn">Send</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ============================
+  // Connection to bridge (WebSocket)
+  // ============================
+  let socket = null;
+  let isConnected = false;
+
+  const statusEl = document.getElementById("status");
+  const chatEl = document.getElementById("chat");
+  const connectBtn = document.getElementById("connect-btn");
+  const chatInput = document.getElementById("chat-input");
+  const sendBtn = document.getElementById("send-btn");
+  const channelListEl = document.getElementById("channel-list");
+  const userListEl = document.getElementById("user-list");
+
+  function addChatLine(text) {
+    const p = document.createElement("p");
+    p.textContent = text;
+    chatEl.appendChild(p);
+    chatEl.scrollTop = chatEl.scrollHeight;
+  }
+
+  function setStatus(text) {
+    statusEl.textContent = text;
+  }
+
+  function connectToBridge() {
+    if (isConnected) return;
+
+    // TODO: change this to your actual bridge URL (wss:// or ws://)
+    socket = new WebSocket("ws://localhost:8080");
+
+    setStatus("Connecting to bridge…");
+    addChatLine("[Connecting to bridge…]");
+
+    socket.onopen = () => {
+      isConnected = true;
+      setStatus("Connected to bridge (linking to TeamTalk…)");
+
+      // ask bridge to connect to your TeamTalk server
+      socket.send(JSON.stringify({
+        type: "connect",
+        host: "tt.seedy.cc",
+        tcp: 10333,
+        udp: 10333
+      }));
+
+      addChatLine("[Bridge connected. Requesting TeamTalk connection…]");
+    };
+
+    socket.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      console.log("From bridge:", msg);
+
+      // Basic handling of high-level messages
+      if (msg.type === "info") {
+        addChatLine("[Info] " + msg.text);
+      } else if (msg.type === "error") {
+        addChatLine("[Error] " + msg.text);
+      } else if (msg.type === "chat") {
+        // future: real chat from server
+        addChatLine(msg.from + ": " + msg.text);
+      } else if (msg.type === "channel-list") {
+        renderChannels(msg.channels);
+      } else if (msg.type === "user-list") {
+        renderUsers(msg.users);
+      } else if (msg.type === "status") {
+        setStatus(msg.text);
+      }
+      // msg.type === "tt-data" etc. can be handled later
+    };
+
+    socket.onerror = (err) => {
+      console.error("WebSocket error:", err);
+      addChatLine("[WebSocket error. See console for details.]");
+      setStatus("Bridge error");
+    };
+
+    socket.onclose = () => {
+      isConnected = false;
+      addChatLine("[Disconnected from bridge]");
+      setStatus("Disconnected");
+    };
+  }
+
+  function renderChannels(channels) {
+    channelListEl.innerHTML = "";
+    channels.forEach(ch => {
+      const li = document.createElement("li");
+      li.textContent = ch.name;
+      li.onclick = () => {
+        if (!socket) return;
+        socket.send(JSON.stringify({
+          type: "join-channel",
+          channelId: ch.id
+        }));
+        addChatLine("[Joining channel: " + ch.name + "]");
+      };
+      channelListEl.appendChild(li);
+    });
+  }
+
+  function renderUsers(users) {
+    userListEl.innerHTML = "";
+    users.forEach(u => {
+      const li = document.createElement("li");
+      li.textContent = u.name;
+      userListEl.appendChild(li);
+    });
+    if (users.length === 0) {
+      const li = document.createElement("li");
+      li.textContent = "[No users in channel]";
+      userListEl.appendChild(li);
+    }
+  }
+
+  connectBtn.addEventListener("click", connectToBridge);
+
+  // ============================
+  // Chat send (to bridge → to TeamTalk)
+  // ============================
+  function sendChat() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      addChatLine("[Local] " + text);
+      chatInput.value = "";
+      return;
+    }
+
+    socket.send(JSON.stringify({
+      type: "send-chat",
+      text
+    }));
+    addChatLine("[You] " + text);
+    chatInput.value = "";
+  }
+
+  sendBtn.addEventListener("click", sendChat);
+  chatInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      sendChat();
+    }
+  });
+
+  // ============================
+  // AAC: Text → Speech
+  // ============================
+  const speakBtn = document.getElementById("speak-btn");
+  const stopSpeakBtn = document.getElementById("stop-speak-btn");
+
+  function speakText(text) {
+    if (!text) return;
+    const msg = new SpeechSynthesisUtterance(text);
+    speechSynthesis.speak(msg);
+  }
+
+  speakBtn.addEventListener("click", () => {
+    const text = chatInput.value.trim();
+    if (!text) return;
+    speakText(text);
+  });
+
+  stopSpeakBtn.addEventListener("click", () => {
+    speechSynthesis.cancel();
+  });
+
+  // ============================
+  // AAC: Speech → Text
+  // ============================
+  const speechToTextBtn = document.getElementById("speech-to-text-btn");
+
+  function startSpeechToText() {
+    if (!("webkitSpeechRecognition" in window)) {
+      addChatLine("[Speech recognition not supported in this browser.]");
+      return;
+    }
+
+    const rec = new webkitSpeechRecognition();
+    rec.lang = "en-GB";
+    rec.onresult = e => {
+      const text = e.results[0][0].transcript;
+      chatInput.value = text;
+      addChatLine("[Speech→Text captured]");
+    };
+    rec.onerror = () => {
+      addChatLine("[Speech recognition error]");
+    };
+    rec.start();
+  }
+
+  speechToTextBtn.addEventListener("click", startSpeechToText);
+
+  // ============================
+  // AAC: Clipboard detection (for symbol output)
+  // ============================
+  document.addEventListener("paste", e => {
+    const text = e.clipboardData.getData("text");
+    if (text) {
+      console.log("AAC output pasted:", text);
+      // You could auto-insert into chat input if you want:
+      // chatInput.value = text;
+    }
+  });
+
+</script>
+</body>
+</html>
