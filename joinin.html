@@ -176,20 +176,9 @@
 
   <!-- LEFT PANEL: AAC-FRIENDLY BUTTONS -->
   <div id="left-panel">
-
-    <button class="aac-button" onclick="connectToBridge()">
-      Connect to Bridge
-    </button>
-
-    <button class="aac-button" onclick="requestTeamTalkHandshake({
-      host: 'tt.seedy.cc',
-      port: 10333,
-      username: 'admin',
-      password: 'admin',
-      channel: '/'
-    })">
-      Connect to TeamTalk
-    </button>
+<button class="aac-button" onclick="connectEverything()">
+  Connect
+</button>
 
     <button class="aac-button" onclick="speakText(document.getElementById('chat-input').value)">
       Speak Text
