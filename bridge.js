@@ -17,9 +17,11 @@ function sendToServer(obj) {
   socket.send(json);
 }
 
+// Track current channel on the UI side
+let currentChannelPath = "/";
+
 // === WEBSOCKET CONNECTION =================================
 
-// Important: socket is defined after the helpers so they can use it.
 const socket = new WebSocket("wss://connectingworlds-bridge.onrender.com");
 
 logToServerConsole("[UI] Connecting to bridge…");
@@ -51,19 +53,6 @@ socket.onmessage = (event) => {
 
   if (data.type === "handshake-ack") {
     logToServerConsole("[UI] Handshake ACK from bridge: " + (data.message || ""));
-
-    // OPTIONAL: automatically request a TeamTalk connection here.
-    // You can change these values or trigger this from a button instead.
-    /*
-    window.requestTeamTalkHandshake({
-      host: "your.tt.server",
-      port: 10333,
-      username: "Jamie",
-      password: "secret",
-      channel: "Lobby"
-    });
-    */
-
     return;
   }
 
@@ -73,15 +62,34 @@ socket.onmessage = (event) => {
   }
 
   if (data.type === "tt-status") {
-    // All TeamTalk bridge status updates arrive here
     logToServerConsole("[TT] " + (data.message || data.phase || "status"));
-    // You can add extra UI updates here later (e.g., show connection state)
+    return;
+  }
+
+  if (data.type === "tt-channel-list") {
+    renderChannelList(data.channels || []);
+    return;
+  }
+
+  if (data.type === "tt-user-list") {
+    renderUserList(data.users || []);
+    return;
+  }
+
+  if (data.type === "tt-chat") {
+    appendChatLine(data.from || "TT", data.text || "", data.channel || "");
+    return;
+  }
+
+  if (data.type === "tt-current-channel") {
+    currentChannelPath = data.channel || "/";
+    updateCurrentChannelDisplay();
     return;
   }
 
   if (data.type === "chat") {
-    // Basic chat display hook
-    logToServerConsole("[CHAT] " + (data.from || "bridge") + ": " + data.text);
+    // Web-only chat
+    appendChatLine(data.from || "bridge", data.text || "", "[web]");
     return;
   }
 
@@ -100,9 +108,12 @@ socket.onclose = () => {
 
 // === PUBLIC HELPERS (EXPOSED ON WINDOW) ===================
 
-// TeamTalk handshake request – can be called from buttons, etc.
 window.requestTeamTalkHandshake = function (options) {
   logToServerConsole("[UI] Requesting TeamTalk connection…");
+
+  // Optimistically set the current channel to whatever we're requesting
+  currentChannelPath = options.channel || "/";
+  updateCurrentChannelDisplay();
 
   sendToServer({
     type: "tt-handshake",
@@ -114,7 +125,6 @@ window.requestTeamTalkHandshake = function (options) {
   });
 };
 
-// Simple ping helper if you want to test latency / liveness
 window.sendPingToBridge = function () {
   sendToServer({
     type: "ping",
@@ -123,7 +133,6 @@ window.sendPingToBridge = function () {
   logToServerConsole("[UI] Sent ping to bridge.");
 };
 
-// Simple chat helper; you can wire this to a text input
 window.sendChatMessage = function (from, text) {
   sendToServer({
     type: "chat",
@@ -131,4 +140,149 @@ window.sendChatMessage = function (from, text) {
     text: text
   });
   logToServerConsole("[UI] Sent chat message from " + from);
+};
+
+// Chat helper specifically for TeamTalk channel chat
+window.sendTeamTalkChat = function () {
+  const input = document.getElementById("chat-input");
+  if (!input) return;
+
+  const text = input.value.trim();
+  if (!text) return;
+
+  sendToServer({
+    type: "tt-chat",
+    channel: currentChannelPath,
+    text
+  });
+
+  input.value = "";
+};
+
+// Allow AAC "Connect" button to just send a ping / no-op
+window.connectToBridge = function () {
+  // The WebSocket auto-connects on page load
+  // So here we just send a ping to confirm liveness
+  window.sendPingToBridge();
+};
+
+// === UI RENDERING HELPERS ================================
+
+function appendChatLine(from, text, channelLabel) {
+  const chatBox = document.getElementById("chat");
+  if (!chatBox) return;
+
+  const p = document.createElement("p");
+  const prefix = channelLabel ? `[${channelLabel}] ` : "";
+  p.textContent = `${prefix}${from}: ${text}`;
+
+  chatBox.appendChild(p);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function renderChannelList(channels) {
+  const list = document.getElementById("channel-list");
+  if (!list) return;
+
+  list.innerHTML = "";
+
+  if (!channels.length) {
+    const li = document.createElement("li");
+    li.textContent = "[No channels]";
+    list.appendChild(li);
+    return;
+  }
+
+  // Sort by path for stability
+  channels.sort((a, b) => (a.path || a.name || "").localeCompare(b.path || b.name || ""));
+
+  for (const ch of channels) {
+    const li = document.createElement("li");
+    li.textContent = ch.path || ch.name || "/";
+    li.dataset.channelPath = ch.path || "/";
+    li.className = "channel-item";
+    list.appendChild(li);
+  }
+}
+
+function renderUserList(users) {
+  const list = document.getElementById("user-list");
+  if (!list) return;
+
+  list.innerHTML = "";
+
+  const relevant = users.filter(u => !!u.nickname);
+
+  if (!relevant.length) {
+    const li = document.createElement("li");
+    li.textContent = "[No users yet]";
+    list.appendChild(li);
+    return;
+  }
+
+  for (const u of relevant) {
+    const li = document.createElement("li");
+    li.textContent = u.nickname + (u.username && u.username !== u.nickname ? ` (${u.username})` : "");
+    list.appendChild(li);
+  }
+}
+
+function updateCurrentChannelDisplay() {
+  const el = document.getElementById("current-channel-label");
+  if (el) {
+    el.textContent = currentChannelPath || "/";
+  }
+}
+
+// Channel click handler
+document.addEventListener("click", (ev) => {
+  const target = ev.target;
+  if (!(target instanceof HTMLElement)) return;
+
+  if (target.classList.contains("channel-item")) {
+    const path = target.dataset.channelPath || "/";
+    currentChannelPath = path;
+    updateCurrentChannelDisplay();
+
+    sendToServer({
+      type: "tt-join",
+      channel: path
+    });
+  }
+});
+
+// === AAC / SPEECH HELPERS ================================
+
+window.speakText = function (text) {
+  if (!text || !window.speechSynthesis) return;
+  const utterance = new SpeechSynthesisUtterance(text);
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+};
+
+window.startSpeechToText = function () {
+  const input = document.getElementById("chat-input");
+  if (!input) return;
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    alert("Speech recognition is not supported in this browser.");
+    return;
+  }
+
+  const recog = new SpeechRecognition();
+  recog.lang = "en-GB";
+  recog.interimResults = false;
+  recog.maxAlternatives = 1;
+
+  recog.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    input.value = transcript;
+  };
+
+  recog.onerror = (event) => {
+    console.error("Speech recognition error:", event.error);
+  };
+
+  recog.start();
 };
