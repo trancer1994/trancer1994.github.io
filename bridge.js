@@ -1,102 +1,134 @@
-// Connect to your Render WebSocket server
+// === UI CONSOLE HELPERS ===================================
+
+function logToServerConsole(msg) {
+  const box = document.getElementById("server-console");
+  if (!box) return;
+
+  const line = document.createElement("div");
+  line.textContent = msg;
+
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+function sendToServer(obj) {
+  const json = JSON.stringify(obj);
+  logToServerConsole(">> " + json);
+  socket.send(json);
+}
+
+// === WEBSOCKET CONNECTION =================================
+
+// Important: socket is defined after the helpers so they can use it.
 const socket = new WebSocket("wss://connectingworlds-bridge.onrender.com");
 
-// Connection opened
-socket.onopen = () => {
-  console.log("Connected to Connecting Worlds bridge");
+logToServerConsole("[UI] Connecting to bridge…");
 
-  // Send structured handshake
-  socket.send(JSON.stringify({
+socket.onopen = () => {
+  logToServerConsole("[UI] Bridge connected. Sending handshake…");
+
+  sendToServer({
     type: "handshake",
     client: "web-ui",
     protocol: 1,
     capabilities: ["chat", "status", "tt-handshake", "ping"],
     timestamp: Date.now()
-  }));
+  });
 };
 
-// Handle incoming messages
 socket.onmessage = (event) => {
   let data;
   try {
     data = JSON.parse(event.data);
   } catch (e) {
-    console.error("Invalid JSON from server:", event.data);
+    logToServerConsole("<< [Invalid JSON] " + event.data);
     return;
   }
 
-  console.log("Received:", data);
+  logToServerConsole("<< " + JSON.stringify(data));
 
-  // Handshake acknowledgement
+  // --- ROUTING BY MESSAGE TYPE ---------------------------
+
   if (data.type === "handshake-ack") {
-    console.log("[Handshake ACK]", data.message);
+    logToServerConsole("[UI] Handshake ACK from bridge: " + (data.message || ""));
+
+    // OPTIONAL: automatically request a TeamTalk connection here.
+    // You can change these values or trigger this from a button instead.
+    /*
+    window.requestTeamTalkHandshake({
+      host: "your.tt.server",
+      port: 10333,
+      username: "Jamie",
+      password: "secret",
+      channel: "Lobby"
+    });
+    */
+
     return;
   }
 
-  // Bridge/server status messages
-  if (data.type === "status") {
-    console.log("[Bridge status]", data.message);
-    return;
-  }
-
-  // TeamTalk status updates
-  if (data.type === "tt-status") {
-    console.log("[TeamTalk status]", data.message || data.phase, data);
-    return;
-  }
-
-  // Pong response (latency check)
   if (data.type === "pong") {
-    const latency = Date.now() - (data.sentAt || Date.now());
-    console.log("[Pong] latency approx:", latency, "ms");
+    logToServerConsole("[UI] Pong received. Server time: " + data.serverTime);
     return;
   }
 
-  // Chat messages
+  if (data.type === "tt-status") {
+    // All TeamTalk bridge status updates arrive here
+    logToServerConsole("[TT] " + (data.message || data.phase || "status"));
+    // You can add extra UI updates here later (e.g., show connection state)
+    return;
+  }
+
   if (data.type === "chat") {
-    console.log("[Chat]", `${data.from}: ${data.text}`);
+    // Basic chat display hook
+    logToServerConsole("[CHAT] " + (data.from || "bridge") + ": " + data.text);
     return;
   }
 
   // Unknown message type
-  console.log("[Unknown message type]", data.type, data);
+  logToServerConsole("[UI] Unhandled message type: " + data.type);
 };
 
-// Connection closed
-socket.onclose = () => {
-  console.log("Disconnected from Connecting Worlds bridge");
-};
-
-// Error handler
 socket.onerror = (err) => {
+  logToServerConsole("[UI] WebSocket error (see browser console for details).");
   console.error("WebSocket error:", err);
 };
 
-// Helper: send chat messages
-window.sendMessage = function(text, from = "web") {
-  socket.send(JSON.stringify({
-    type: "chat",
-    from,
-    text
-  }));
+socket.onclose = () => {
+  logToServerConsole("[UI] Disconnected from bridge.");
 };
 
-// Helper: send ping (manual latency check)
-window.sendPing = function() {
-  socket.send(JSON.stringify({
-    type: "ping",
-    timestamp: Date.now()
-  }));
-};
+// === PUBLIC HELPERS (EXPOSED ON WINDOW) ===================
 
-// Helper: request TeamTalk handshake (future integration)
-window.requestTeamTalkHandshake = function(options) {
-  socket.send(JSON.stringify({
+// TeamTalk handshake request – can be called from buttons, etc.
+window.requestTeamTalkHandshake = function (options) {
+  logToServerConsole("[UI] Requesting TeamTalk connection…");
+
+  sendToServer({
     type: "tt-handshake",
     ttHost: options.host,
     ttPort: options.port,
     username: options.username,
     password: options.password,
     channel: options.channel
-  }));
+  });
+};
+
+// Simple ping helper if you want to test latency / liveness
+window.sendPingToBridge = function () {
+  sendToServer({
+    type: "ping",
+    timestamp: Date.now()
+  });
+  logToServerConsole("[UI] Sent ping to bridge.");
+};
+
+// Simple chat helper; you can wire this to a text input
+window.sendChatMessage = function (from, text) {
+  sendToServer({
+    type: "chat",
+    from: from,
+    text: text
+  });
+  logToServerConsole("[UI] Sent chat message from " + from);
 };
