@@ -2,8 +2,15 @@ const socket = new WebSocket("wss://connectingworlds-bridge.onrender.com");
 
 socket.onopen = () => {
   console.log("Connected to Connecting Worlds bridge");
-};
 
+  socket.send(JSON.stringify({
+    type: "handshake",
+    client: "web-ui",
+    protocol: 1,
+    capabilities: ["chat", "status"],
+    timestamp: Date.now()
+  }));
+};
 socket.onmessage = (event) => {
   const data = JSON.parse(event.data);
   console.log("Received:", data);
