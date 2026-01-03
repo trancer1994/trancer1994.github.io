@@ -155,6 +155,17 @@
 <div id="app">
   <div id="sidebar">
     <section>
+  <h2>TeamTalk Test</h2>
+  <button onclick="requestTeamTalkHandshake({
+    host: 'tt.seedy.cc',
+    port: 10333,
+    username: 'admin',
+    password: 'admin',
+    channel: ''
+  })">
+    Connect to TeamTalk
+  </button>
+    </ul>
       <h2>Channels</h2>
       <ul id="channel-list">
         <li>[Root]</li>
@@ -404,5 +415,17 @@
   });
 
 </script>
+<div id="server-console" style="
+  background:#111;
+  color:#0f0;
+  padding:10px;
+  height:200px;
+  overflow-y:auto;
+  font-family:monospace;
+  font-size:14px;
+  border:1px solid #333;
+  margin-top:10px;
+"></div>
+<script src="bridge.js"></script>
 </body>
 </html>
