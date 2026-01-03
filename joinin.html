@@ -226,8 +226,8 @@
   function connectToBridge() {
     if (isConnected) return;
 
-    // TODO: change this to your actual bridge URL (wss:// or ws://)
-    socket = new WebSocket("ws://localhost:8080");
+    socket = new WebSocket("wss://connectingworlds-bridge.onrender.com");
+
 
     setStatus("Connecting to bridge…");
     addChatLine("[Connecting to bridge…]");
