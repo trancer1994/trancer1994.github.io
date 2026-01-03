@@ -1,6 +1,7 @@
 const WebSocket = require("ws");
 
-const wss = new WebSocket.Server({ port: 8080 });
+const port = process.env.PORT || 8080;
+const wss = new WebSocket.Server({ port });
 
 const clients = new Set();
 
@@ -54,4 +55,5 @@ wss.on("connection", (socket) => {
   });
 });
 
-console.log("Connecting Worlds bridge server listening on ws://localhost:8080");
+console.log(`Connecting Worlds bridge server listening on port ${port}`);
+
