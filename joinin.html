@@ -64,12 +64,13 @@
       background: #eaeaea;
     }
 
-    /* RIGHT PANEL — CHAT */
-    #right-panel {
-      flex: 1;
+    /* MIDDLE PANEL — CHAT */
+    #middle-panel {
+      flex: 1.5;
       display: flex;
       flex-direction: column;
       min-width: 0;
+      border-right: 1px solid #ccc;
     }
 
     #chat {
@@ -101,6 +102,49 @@
     #send-btn {
       padding: 0.7rem 1.2rem;
       font-size: 1rem;
+    }
+
+    /* RIGHT PANEL — CHANNELS & USERS */
+    #right-panel {
+      width: 280px;
+      background: #f9f9f9;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    #right-panel section {
+      padding: 0.75rem;
+      border-bottom: 1px solid #ddd;
+      overflow-y: auto;
+    }
+
+    #right-panel h2 {
+      font-size: 1rem;
+      margin: 0 0 0.5rem 0;
+    }
+
+    #right-panel ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      font-size: 0.95rem;
+    }
+
+    #right-panel li {
+      padding: 0.3rem 0.4rem;
+      cursor: pointer;
+    }
+
+    #right-panel li:hover {
+      background: #e0e0e0;
+    }
+
+    #current-channel {
+      padding: 0.5rem 0.75rem;
+      background: #eee;
+      border-bottom: 1px solid #ddd;
+      font-size: 0.95rem;
     }
 
     /* SERVER CONSOLE */
@@ -142,12 +186,12 @@
       port: 10333,
       username: 'admin',
       password: 'admin',
-      channel: ''
+      channel: '/'
     })">
       Connect to TeamTalk
     </button>
 
-    <button class="aac-button" onclick="speakText(chatInput.value)">
+    <button class="aac-button" onclick="speakText(document.getElementById('chat-input').value)">
       Speak Text
     </button>
 
@@ -161,18 +205,39 @@
 
   </div>
 
-  <!-- RIGHT PANEL: CHAT -->
-  <div id="right-panel">
-
+  <!-- MIDDLE PANEL: CHAT -->
+  <div id="middle-panel">
     <div id="chat">
-      <p>[Connecting Worlds AAC Shell]</p>
-      <p>Bridge and TeamTalk logs will appear below.</p>
+      <p>[Connecting Worlds AAC + TeamTalk Shell]</p>
+      <p>Bridge and TeamTalk logs will appear below. Chat shows TeamTalk and web messages.</p>
     </div>
 
     <div id="input-area">
       <input id="chat-input" type="text" placeholder="Type your message…">
-      <button id="send-btn" onclick="sendChat()">Send</button>
+      <button id="send-btn" onclick="sendTeamTalkChat()">Send</button>
     </div>
+  </div>
+
+  <!-- RIGHT PANEL: CHANNELS & USERS -->
+  <div id="right-panel">
+
+    <div id="current-channel">
+      Current channel: <span id="current-channel-label">/</span>
+    </div>
+
+    <section>
+      <h2>Channels</h2>
+      <ul id="channel-list">
+        <li>[No channels yet]</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Users</h2>
+      <ul id="user-list">
+        <li>[No users yet]</li>
+      </ul>
+    </section>
 
   </div>
 </div>
@@ -180,7 +245,7 @@
 <!-- SERVER CONSOLE -->
 <div id="server-console"></div>
 
-<!-- Load the new unified bridge logic -->
+<!-- Load the unified bridge logic -->
 <script src="bridge.js"></script>
 
 </body>
