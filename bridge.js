@@ -1,4 +1,6 @@
-// === UI CONSOLE HELPERS ===================================
+// ==========================================================
+// UI CONSOLE HELPERS
+// ==========================================================
 
 function logToServerConsole(msg) {
   const box = document.getElementById("server-console");
@@ -20,11 +22,53 @@ function sendToServer(obj) {
 // Track current channel on the UI side
 let currentChannelPath = "/";
 
-// === WEBSOCKET CONNECTION =================================
 
+// ==========================================================
+// WEBSOCKET CONNECTION (ENGINE)
+// ==========================================================
+
+// Auto-connect WebSocket on page load
 const socket = new WebSocket("wss://connectingworlds-bridge.onrender.com");
 
 logToServerConsole("[UI] Connecting to bridge…");
+
+
+// ==========================================================
+// TEAMTALK HANDSHAKE HELPER
+// ==========================================================
+
+function startTeamTalkHandshake() {
+  logToServerConsole("[UI] Starting TeamTalk handshake…");
+
+  requestTeamTalkHandshake({
+    host: "tt.seedy.cc",
+    port: 10333,
+    username: "admin",
+    password: "admin",
+    channel: "/"
+  });
+}
+
+
+// ==========================================================
+// UNIFIED CONNECT BUTTON (RITUAL)
+// ==========================================================
+
+window.connectEverything = function () {
+  logToServerConsole("[UI] Connect pressed…");
+
+  if (socket.readyState === WebSocket.OPEN) {
+    logToServerConsole("[UI] Bridge already connected. Beginning TeamTalk arc…");
+    startTeamTalkHandshake();
+  } else {
+    logToServerConsole("[UI] Waiting for WebSocket to open…");
+  }
+};
+
+
+// ==========================================================
+// WEBSOCKET EVENT HANDLERS
+// ==========================================================
 
 socket.onopen = () => {
   logToServerConsole("[UI] Bridge connected. Sending handshake…");
@@ -49,10 +93,13 @@ socket.onmessage = (event) => {
 
   logToServerConsole("<< " + JSON.stringify(data));
 
-  // --- ROUTING BY MESSAGE TYPE ---------------------------
+  // --------------------------------------------------------
+  // ROUTING
+  // --------------------------------------------------------
 
   if (data.type === "handshake-ack") {
     logToServerConsole("[UI] Handshake ACK from bridge: " + (data.message || ""));
+    // DO NOT auto-start TeamTalk here — Option 2 requires user ritual
     return;
   }
 
@@ -88,17 +135,15 @@ socket.onmessage = (event) => {
   }
 
   if (data.type === "chat") {
-    // Web-only chat
     appendChatLine(data.from || "bridge", data.text || "", "[web]");
     return;
   }
 
-  // Unknown message type
   logToServerConsole("[UI] Unhandled message type: " + data.type);
 };
 
 socket.onerror = (err) => {
-  logToServerConsole("[UI] WebSocket error (see browser console for details).");
+  logToServerConsole("[UI] WebSocket error (see browser console).");
   console.error("WebSocket error:", err);
 };
 
@@ -106,12 +151,14 @@ socket.onclose = () => {
   logToServerConsole("[UI] Disconnected from bridge.");
 };
 
-// === PUBLIC HELPERS (EXPOSED ON WINDOW) ===================
+
+// ==========================================================
+// PUBLIC HELPERS (EXPOSED ON WINDOW)
+// ==========================================================
 
 window.requestTeamTalkHandshake = function (options) {
   logToServerConsole("[UI] Requesting TeamTalk connection…");
 
-  // Optimistically set the current channel to whatever we're requesting
   currentChannelPath = options.channel || "/";
   updateCurrentChannelDisplay();
 
@@ -125,14 +172,6 @@ window.requestTeamTalkHandshake = function (options) {
   });
 };
 
-window.sendPingToBridge = function () {
-  sendToServer({
-    type: "ping",
-    timestamp: Date.now()
-  });
-  logToServerConsole("[UI] Sent ping to bridge.");
-};
-
 window.sendChatMessage = function (from, text) {
   sendToServer({
     type: "chat",
@@ -142,7 +181,6 @@ window.sendChatMessage = function (from, text) {
   logToServerConsole("[UI] Sent chat message from " + from);
 };
 
-// Chat helper specifically for TeamTalk channel chat
 window.sendTeamTalkChat = function () {
   const input = document.getElementById("chat-input");
   if (!input) return;
@@ -159,14 +197,10 @@ window.sendTeamTalkChat = function () {
   input.value = "";
 };
 
-// Allow AAC "Connect" button to just send a ping / no-op
-window.connectToBridge = function () {
-  // The WebSocket auto-connects on page load
-  // So here we just send a ping to confirm liveness
-  window.sendPingToBridge();
-};
 
-// === UI RENDERING HELPERS ================================
+// ==========================================================
+// UI RENDERING HELPERS
+// ==========================================================
 
 function appendChatLine(from, text, channelLabel) {
   const chatBox = document.getElementById("chat");
@@ -193,7 +227,6 @@ function renderChannelList(channels) {
     return;
   }
 
-  // Sort by path for stability
   channels.sort((a, b) => (a.path || a.name || "").localeCompare(b.path || b.name || ""));
 
   for (const ch of channels) {
@@ -234,7 +267,11 @@ function updateCurrentChannelDisplay() {
   }
 }
 
-// Channel click handler
+
+// ==========================================================
+// CHANNEL CLICK HANDLER
+// ==========================================================
+
 document.addEventListener("click", (ev) => {
   const target = ev.target;
   if (!(target instanceof HTMLElement)) return;
@@ -251,7 +288,10 @@ document.addEventListener("click", (ev) => {
   }
 });
 
-// === AAC / SPEECH HELPERS ================================
+
+// ==========================================================
+// AAC SPEECH HELPERS
+// ==========================================================
 
 window.speakText = function (text) {
   if (!text || !window.speechSynthesis) return;
