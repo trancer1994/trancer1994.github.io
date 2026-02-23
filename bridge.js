@@ -1,5 +1,5 @@
 /* ==========================================================
-   UI STATE MACHINE
+   GLOBAL UI STATE
    ========================================================== */
 
 const uiState = {
@@ -12,6 +12,22 @@ const uiState = {
 };
 
 const ui = {};
+
+let socket = null;
+let currentSocketId = 0; // to ignore stale sockets
+let reconnectAttempts = 0;
+const reconnectDelays = [3000, 10000, 30000]; // ms
+let currentChannelPath = "/";
+let lastUserNicknames = new Set();
+
+const statusSpeechQueue = [];
+const conversationMemory = [];
+const MAX_MEMORY = 20;
+
+
+/* ==========================================================
+   BASIC UI HELPERS
+   ========================================================== */
 
 function setConnectButtonState(state, label) {
   const btn = document.getElementById("connect-btn");
@@ -85,12 +101,11 @@ function updateTeamTalkStatus(connected) {
 
 
 /* ==========================================================
-   SOUND CUES
+   SOUND CUES (FILE-BASED) + OPTIONAL TONE GENERATOR
    ========================================================== */
 
 function playSound(name) {
   if (!uiState.soundEnabled) return;
-
   const el = document.getElementById(`sound-${name}`);
   if (el) {
     el.currentTime = 0;
@@ -98,9 +113,19 @@ function playSound(name) {
   }
 }
 
+// Optional pure‑tone fallback if you want it later:
+// function playTone(freq, duration = 120) {
+//   if (!uiState.soundEnabled) return;
+//   const ctx = new (window.AudioContext || window.webkitAudioContext)();
+//   const osc = ctx.createOscillator();
+//   osc.frequency.value = freq;
+//   osc.connect(ctx.destination);
+//   osc.start();
+//   osc.stop(ctx.currentTime + duration / 1000);
+// }
+
 window.toggleSoundCues = function () {
   uiState.soundEnabled = !uiState.soundEnabled;
-
   const btn = document.getElementById("sound-toggle");
   if (btn) {
     btn.textContent = uiState.soundEnabled ? "Sound cues: ON" : "Sound cues: OFF";
@@ -109,7 +134,6 @@ window.toggleSoundCues = function () {
 
 window.togglePresenceCues = function () {
   uiState.presenceEnabled = !uiState.presenceEnabled;
-
   const btn = document.getElementById("presence-toggle");
   if (btn) {
     btn.textContent = uiState.presenceEnabled ? "Presence tones: ON" : "Presence tones: OFF";
@@ -137,8 +161,6 @@ function exitSoftFocus() {
 /* ==========================================================
    STATUS SPEECH (QUEUED, NON-INTERRUPTING)
    ========================================================== */
-
-const statusSpeechQueue = [];
 
 function processStatusSpeechQueue() {
   if (!uiState.soundEnabled) {
@@ -172,7 +194,7 @@ function speakStatus(text) {
 
 
 /* ==========================================================
-   LOGGING (console only)
+   LOGGING + SEND
    ========================================================== */
 
 function logToServerConsole(msg) {
@@ -180,116 +202,31 @@ function logToServerConsole(msg) {
 }
 
 function sendToServer(obj) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
   socket.send(JSON.stringify(obj));
 }
 
-let currentChannelPath = "/";
-
 
 /* ==========================================================
-   WEBSOCKET CONNECTION + AUTO-RECONNECT
+   SINGLE-SOCKET MANAGEMENT + AUTO-RECONNECT
    ========================================================== */
-
-let socket = createSocket();
-let reconnectAttempts = 0;
-const reconnectDelays = [3000, 10000, 30000]; // ms
 
 function createSocket() {
-  const ws = new WebSocket("wss://connectingworlds-bridge.onrender.com");
-  logToServerConsole("[UI] Connecting to bridge…");
-  attachSocketHandlers(ws);
-  return ws;
-}
-
-function scheduleReconnect() {
-  if (uiState.manualDisconnect) return;
-  if (reconnectAttempts >= reconnectDelays.length) {
-    speakStatus("Bridge offline. Please reconnect manually.");
-    setConnectButtonState("disconnected", "Connect");
-    return;
-  }
-
-  const delay = reconnectDelays[reconnectAttempts];
-  reconnectAttempts += 1;
-
-  speakStatus(`Connection lost. Reconnecting, attempt ${reconnectAttempts}.`);
-  setConnectButtonState("connecting", "Reconnecting…");
-
-  setTimeout(() => {
-    if (navigator && navigator.onLine === false) {
-      speakStatus("Offline. Please check your internet connection.");
-      setConnectButtonState("disconnected", "Connect");
-      return;
-    }
-
-    logToServerConsole(`[UI] Reconnect attempt ${reconnectAttempts}…`);
-    socket = createSocket();
-  }, delay);
-}
-
-
-/* ==========================================================
-   TEAMTALK HANDSHAKE
-   ========================================================== */
-
-function startTeamTalkHandshake() {
-  logToServerConsole("[UI] Starting TeamTalk handshake…");
-  speakStatus("Connecting to TeamTalk");
-
-  requestTeamTalkHandshake({
-    host: "tt.seedy.cc",
-    port: 10333,
-    username: "admin",
-    password: "admin",
-    channel: "/"
-  });
-}
-
-
-/* ==========================================================
-   CONNECT / DISCONNECT BUTTONS
-   ========================================================== */
-
-window.connectEverything = function () {
-  logToServerConsole("[UI] Connect pressed…");
-  uiState.manualDisconnect = false;
-
-  const btn = document.getElementById("connect-btn");
-  if (btn) setConnectButtonState("connecting", "Reconnecting…");
-
-  if (uiState.connected) {
-    startTeamTalkHandshake();
-    return;
-  }
-
-  if (socket.readyState === WebSocket.OPEN) {
-    ui.enterConnectedState();
-    startTeamTalkHandshake();
-  } else {
-    logToServerConsole("[UI] Waiting for WebSocket to open…");
-    speakStatus("Connecting to bridge");
-  }
-};
-
-window.disconnectEverything = function () {
-  logToServerConsole("[UI] Disconnect pressed…");
-  uiState.manualDisconnect = true;
-  reconnectAttempts = 0;
-
+  // Close any existing socket cleanly
   if (socket && socket.readyState === WebSocket.OPEN) {
-    sendToServer({ type: "disconnect" });
+    try {
+      socket.close();
+    } catch (_) {}
   }
 
-  ui.enterDisconnectedState();
-};
+  const thisId = ++currentSocketId;
+  const ws = new WebSocket("wss://connectingworlds-bridge.onrender.com");
+  socket = ws;
 
+  logToServerConsole("[UI] Connecting to bridge…");
 
-/* ==========================================================
-   SOCKET HANDLERS
-   ========================================================== */
-
-function attachSocketHandlers(ws) {
   ws.onopen = () => {
+    if (thisId !== currentSocketId) return; // stale
     reconnectAttempts = 0;
     updateBridgeStatus(true);
     flashStatusPanel();
@@ -297,6 +234,7 @@ function attachSocketHandlers(ws) {
     playSound("bridge-connected");
     speakStatus("Bridge connected");
 
+    // Initial handshake with bridge
     sendToServer({
       type: "handshake",
       client: "web-ui",
@@ -304,9 +242,18 @@ function attachSocketHandlers(ws) {
       capabilities: ["chat", "status", "tt-handshake", "ping"],
       timestamp: Date.now()
     });
+
+    // Delay TeamTalk handshake slightly to avoid race conditions
+    setTimeout(() => {
+      if (!uiState.manualDisconnect && thisId === currentSocketId) {
+        startTeamTalkHandshake();
+      }
+    }, 250);
   };
 
   ws.onmessage = (event) => {
+    if (thisId !== currentSocketId) return; // ignore stale socket
+
     let data;
     try {
       data = JSON.parse(event.data);
@@ -334,24 +281,7 @@ function attachSocketHandlers(ws) {
         break;
 
       case "tt-status":
-        console.log("[TT]", data.message || data.phase);
-
-        if (data.phase === "connected") {
-          uiState.ttConnected = true;
-          updateTeamTalkStatus(true);
-          flashStatusPanel();
-          playSound("tt-connected");
-          speakStatus("TeamTalk connected");
-        }
-
-        if (data.phase === "disconnected" || data.phase === "error") {
-          uiState.ttConnected = false;
-          updateTeamTalkStatus(false);
-          flashStatusPanel();
-          playSound("tt-disconnected");
-          speakStatus("TeamTalk disconnected");
-        }
-
+        handleTeamTalkStatus(data);
         break;
 
       case "tt-channel-list":
@@ -383,10 +313,12 @@ function attachSocketHandlers(ws) {
   };
 
   ws.onerror = (err) => {
+    if (thisId !== currentSocketId) return;
     console.error("[UI] WebSocket error:", err);
   };
 
   ws.onclose = () => {
+    if (thisId !== currentSocketId) return;
     console.log("[UI] Disconnected from bridge.");
     updateBridgeStatus(false);
     updateTeamTalkStatus(false);
@@ -400,6 +332,115 @@ function attachSocketHandlers(ws) {
   };
 }
 
+function scheduleReconnect() {
+  if (uiState.manualDisconnect) return;
+  if (reconnectAttempts >= reconnectDelays.length) {
+    speakStatus("Bridge offline. Please reconnect manually.");
+    setConnectButtonState("disconnected", "Connect");
+    return;
+  }
+
+  const delay = reconnectDelays[reconnectAttempts];
+  reconnectAttempts += 1;
+
+  speakStatus(`Connection lost. Reconnecting, attempt ${reconnectAttempts}.`);
+  setConnectButtonState("connecting", "Reconnecting…");
+
+  setTimeout(() => {
+    if (navigator && navigator.onLine === false) {
+      speakStatus("Offline. Please check your internet connection.");
+      setConnectButtonState("disconnected", "Connect");
+      return;
+    }
+    logToServerConsole(`[UI] Reconnect attempt ${reconnectAttempts}…`);
+    createSocket();
+  }, delay);
+}
+
+
+/* ==========================================================
+   TEAMTALK HANDSHAKE + STATUS
+   ========================================================== */
+
+function startTeamTalkHandshake() {
+  logToServerConsole("[UI] Starting TeamTalk handshake…");
+  speakStatus("Connecting to TeamTalk");
+
+  requestTeamTalkHandshake({
+    host: "tt.seedy.cc",
+    port: 10333,
+    username: "admin",
+    password: "admin",
+    channel: "/"
+  });
+}
+
+function handleTeamTalkStatus(data) {
+  console.log("[TT]", data.message || data.phase);
+
+  if (data.phase === "connected") {
+    uiState.ttConnected = true;
+    updateTeamTalkStatus(true);
+    flashStatusPanel();
+    playSound("tt-connected");
+    speakStatus("TeamTalk connected");
+  }
+
+  if (data.phase === "disconnected" || data.phase === "error") {
+    uiState.ttConnected = false;
+    updateTeamTalkStatus(false);
+    flashStatusPanel();
+    playSound("tt-disconnected");
+    speakStatus("TeamTalk disconnected");
+  }
+}
+
+
+/* ==========================================================
+   CONNECT / DISCONNECT BUTTONS
+   ========================================================== */
+
+window.connectEverything = function () {
+  logToServerConsole("[UI] Connect pressed…");
+  uiState.manualDisconnect = false;
+
+  const btn = document.getElementById("connect-btn");
+  if (btn) setConnectButtonState("connecting", "Reconnecting…");
+
+  if (!socket || socket.readyState === WebSocket.CLOSED) {
+    createSocket();
+    return;
+  }
+
+  if (uiState.connected && uiState.ttConnected) {
+    speakStatus("Already connected.");
+    return;
+  }
+
+  if (socket.readyState === WebSocket.OPEN) {
+    ui.enterConnectedState();
+    startTeamTalkHandshake();
+  } else {
+    logToServerConsole("[UI] Waiting for WebSocket to open…");
+    speakStatus("Connecting to bridge");
+  }
+};
+
+window.disconnectEverything = function () {
+  logToServerConsole("[UI] Disconnect pressed…");
+  uiState.manualDisconnect = true;
+  reconnectAttempts = 0;
+
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    try {
+      sendToServer({ type: "disconnect" });
+      socket.close();
+    } catch (_) {}
+  }
+
+  ui.enterDisconnectedState();
+};
+
 
 /* ==========================================================
    PUBLIC HELPERS
@@ -411,14 +452,16 @@ window.requestTeamTalkHandshake = function (options) {
   currentChannelPath = options.channel || "/";
   updateCurrentChannelDisplay();
 
-  sendToServer({
-    type: "tt-handshake",
-    ttHost: options.host,
-    ttPort: options.port,
-    username: options.username,
-    password: options.password,
-    channel: options.channel
-  });
+  setTimeout(() => {
+    sendToServer({
+      type: "tt-handshake",
+      ttHost: options.host,
+      ttPort: options.port,
+      username: options.username,
+      password: options.password,
+      channel: options.channel
+    });
+  }, 200);
 };
 
 window.sendChatMessage = function (from, text) {
@@ -447,11 +490,8 @@ window.sendTeamTalkChat = function () {
 
 
 /* ==========================================================
-   CONVERSATION MEMORY (Chapter 8)
+   CONVERSATION MEMORY
    ========================================================== */
-
-const conversationMemory = [];
-const MAX_MEMORY = 20;
 
 function addToConversationMemory(from, text, channel) {
   conversationMemory.push({
@@ -542,8 +582,6 @@ function renderChannelList(channels) {
   }
 }
 
-let lastUserNicknames = new Set();
-
 function renderUserList(users) {
   const list = document.getElementById("user-list");
   if (!list) return;
@@ -607,7 +645,7 @@ function updateCurrentChannelDisplay() {
 
 
 /* ==========================================================
-   NEW ACTIVITY MARKERS (Chapter 6)
+   NEW ACTIVITY MARKERS
    ========================================================== */
 
 function markChannelActivity(path) {
@@ -634,7 +672,7 @@ function clearChannelActivity(path) {
 
 
 /* ==========================================================
-   CHANNEL CLICK HANDLER
+   CLICK HANDLERS + ADAPTIVE LAYOUT
    ========================================================== */
 
 document.addEventListener("click", (ev) => {
@@ -664,9 +702,16 @@ if (chatInput) {
   chatInput.addEventListener("focus", () => setAdaptiveMode("chat"));
 }
 
+function setAdaptiveMode(mode) {
+  document.body.classList.remove("mode-chat", "mode-channels", "mode-aac");
+  if (mode === "chat") document.body.classList.add("mode-chat");
+  if (mode === "channels") document.body.classList.add("mode-channels");
+  if (mode === "aac") document.body.classList.add("mode-aac");
+}
+
 
 /* ==========================================================
-   AAC SPEECH HELPERS (kept, with soft focus)
+   AAC SPEECH HELPERS
    ========================================================== */
 
 window.speakText = function (text) {
@@ -712,7 +757,7 @@ window.startSpeechToText = function () {
 
 
 /* ==========================================================
-   AAC QUICK PHRASES (Chapter 9)
+   AAC QUICK PHRASES
    ========================================================== */
 
 window.sendQuickPhrase = function (text) {
@@ -726,24 +771,22 @@ window.sendQuickPhrase = function (text) {
 
 
 /* ==========================================================
-   ADAPTIVE LAYOUT (Chapter 10)
-   ========================================================== */
-
-function setAdaptiveMode(mode) {
-  document.body.classList.remove("mode-chat", "mode-channels", "mode-aac");
-  if (mode === "chat") document.body.classList.add("mode-chat");
-  if (mode === "channels") document.body.classList.add("mode-channels");
-  if (mode === "aac") document.body.classList.add("mode-aac");
-}
-
-
-/* ==========================================================
    CLEANUP ON UNLOAD
    ========================================================== */
 
 window.addEventListener("beforeunload", () => {
   uiState.manualDisconnect = true;
   if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: "disconnect" }));
+    try {
+      socket.send(JSON.stringify({ type: "disconnect" }));
+      socket.close();
+    } catch (_) {}
   }
 });
+
+
+/* ==========================================================
+   INITIALISE
+   ========================================================== */
+
+createSocket();
