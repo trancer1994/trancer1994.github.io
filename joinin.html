@@ -58,10 +58,31 @@
       border-radius: 6px;
       cursor: pointer;
       text-align: center;
+      transition: box-shadow 0.2s ease, background 0.2s ease, transform 0.2s ease;
     }
 
     .aac-button:hover {
       background: #eaeaea;
+    }
+
+    /* CONNECT BUTTON STATES */
+    #connect-btn.connecting {
+      animation: cw-pulse 1.2s infinite ease-in-out;
+      box-shadow: 0 0 0 2px #0077ff55;
+    }
+
+    #connect-btn.connected {
+      box-shadow: 0 0 0 2px #00aa4f88;
+    }
+
+    #connect-btn.disconnected {
+      box-shadow: 0 0 0 2px #cc000088;
+    }
+
+    @keyframes cw-pulse {
+      0%   { transform: scale(1);   box-shadow: 0 0 0 0 #0077ff55; }
+      50%  { transform: scale(1.03); box-shadow: 0 0 0 6px #0077ff22; }
+      100% { transform: scale(1);   box-shadow: 0 0 0 0 #0077ff00; }
     }
 
     /* STATUS PANEL */
@@ -72,6 +93,11 @@
       border-radius: 6px;
       font-size: 1rem;
       line-height: 1.4;
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    #status-panel.status-changed {
+      box-shadow: 0 0 0 3px #0077ff33;
     }
 
     #status-panel div {
@@ -88,6 +114,7 @@
       cursor: pointer;
       font-size: 1rem;
       text-align: center;
+      transition: background 0.2s ease, box-shadow 0.2s ease;
     }
 
     #sound-toggle:hover {
@@ -195,7 +222,7 @@
   <!-- LEFT PANEL: AAC-FRIENDLY BUTTONS -->
   <div id="left-panel">
 
-    <button id="connect-btn" class="aac-button" onclick="connectEverything()">
+    <button id="connect-btn" class="aac-button disconnected" onclick="connectEverything()">
       Connect
     </button>
 
@@ -265,7 +292,7 @@
   </div>
 </div>
 
-<!-- SOUND CUES -->
+<!-- SOUND CUES (placeholder tiny WAVs; you can swap these later) -->
 <audio id="sound-bridge-connected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
 <audio id="sound-bridge-disconnected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
 <audio id="sound-tt-connected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
