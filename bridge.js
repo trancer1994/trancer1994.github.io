@@ -4,23 +4,40 @@
 
 const uiState = {
   connected: false,
-  ttConnected: false
+  ttConnected: false,
+  soundEnabled: true
 };
 
 const ui = {};
+
+function setConnectButtonState(state) {
+  const btn = document.getElementById("connect-btn");
+  if (!btn) return;
+  btn.classList.remove("connecting", "connected", "disconnected");
+  btn.classList.add(state);
+}
+
+function flashStatusPanel() {
+  const panel = document.getElementById("status-panel");
+  if (!panel) return;
+  panel.classList.add("status-changed");
+  setTimeout(() => panel.classList.remove("status-changed"), 250);
+}
 
 ui.enterConnectedState = () => {
   uiState.connected = true;
 
   const connectBtn = document.getElementById("connect-btn");
   const disconnectBtn = document.getElementById("disconnect-btn");
-  const tapToConnect = document.getElementById("tap-to-connect");
 
   if (connectBtn) connectBtn.style.display = "none";
   if (disconnectBtn) disconnectBtn.style.display = "block";
-  if (tapToConnect) tapToConnect.style.display = "none";
 
   updateBridgeStatus(true);
+  flashStatusPanel();
+  setConnectButtonState("connected");
+  playSound("bridge-connected");
+  speakStatus("Bridge connected");
 };
 
 ui.enterDisconnectedState = () => {
@@ -29,14 +46,17 @@ ui.enterDisconnectedState = () => {
 
   const connectBtn = document.getElementById("connect-btn");
   const disconnectBtn = document.getElementById("disconnect-btn");
-  const tapToConnect = document.getElementById("tap-to-connect");
 
   if (connectBtn) connectBtn.style.display = "block";
   if (disconnectBtn) disconnectBtn.style.display = "none";
-  if (tapToConnect) tapToConnect.style.display = "block";
 
   updateBridgeStatus(false);
   updateTeamTalkStatus(false);
+  flashStatusPanel();
+  setConnectButtonState("disconnected");
+
+  playSound("bridge-disconnected");
+  speakStatus("Bridge disconnected");
 };
 
 
@@ -54,6 +74,67 @@ function updateTeamTalkStatus(connected) {
   const el = document.getElementById("tt-status");
   if (!el) return;
   el.textContent = connected ? "TeamTalk: 🟢 Connected" : "TeamTalk: 🔴 Disconnected";
+}
+
+
+/* ==========================================================
+   SOUND CUES
+   ========================================================== */
+
+function playSound(name) {
+  if (!uiState.soundEnabled) return;
+
+  const el = document.getElementById(`sound-${name}`);
+  if (el) {
+    el.currentTime = 0;
+    el.play().catch(() => {});
+  }
+}
+
+window.toggleSoundCues = function () {
+  uiState.soundEnabled = !uiState.soundEnabled;
+
+  const btn = document.getElementById("sound-toggle");
+  if (btn) {
+    btn.textContent = uiState.soundEnabled ? "Sound cues: ON" : "Sound cues: OFF";
+  }
+};
+
+
+/* ==========================================================
+   STATUS SPEECH (QUEUED, NON-INTERRUPTING)
+   ========================================================== */
+
+const statusSpeechQueue = [];
+
+function processStatusSpeechQueue() {
+  if (!uiState.soundEnabled) {
+    statusSpeechQueue.length = 0;
+    return;
+  }
+
+  if (!("speechSynthesis" in window)) return;
+  if (speechSynthesis.speaking) return;
+  if (!statusSpeechQueue.length) return;
+
+  const text = statusSpeechQueue.shift();
+  const utterance = new SpeechSynthesisUtterance(text);
+  // Use system default voice; do not override.
+  utterance.rate = 1.0;
+  utterance.pitch = 1.0;
+
+  utterance.onend = () => {
+    // When any speech ends (AAC or status), try the next status item.
+    setTimeout(processStatusSpeechQueue, 50);
+  };
+
+  speechSynthesis.speak(utterance);
+}
+
+function speakStatus(text) {
+  if (!uiState.soundEnabled) return;
+  statusSpeechQueue.push(text);
+  processStatusSpeechQueue();
 }
 
 
@@ -87,6 +168,7 @@ logToServerConsole("[UI] Connecting to bridge…");
 
 function startTeamTalkHandshake() {
   logToServerConsole("[UI] Starting TeamTalk handshake…");
+  speakStatus("Connecting to TeamTalk");
 
   requestTeamTalkHandshake({
     host: "tt.seedy.cc",
@@ -105,8 +187,10 @@ function startTeamTalkHandshake() {
 window.connectEverything = function () {
   logToServerConsole("[UI] Connect pressed…");
 
+  const btn = document.getElementById("connect-btn");
+  if (btn) setConnectButtonState("connecting");
+
   if (uiState.connected) {
-    logToServerConsole("[UI] Bridge already connected. Beginning TeamTalk arc…");
     startTeamTalkHandshake();
     return;
   }
@@ -116,6 +200,7 @@ window.connectEverything = function () {
     startTeamTalkHandshake();
   } else {
     logToServerConsole("[UI] Waiting for WebSocket to open…");
+    speakStatus("Connecting to bridge");
   }
 };
 
@@ -141,6 +226,10 @@ window.disconnectEverything = function () {
 
 socket.onopen = () => {
   updateBridgeStatus(true);
+  flashStatusPanel();
+  setConnectButtonState("connected");
+  playSound("bridge-connected");
+  speakStatus("Bridge connected");
 
   sendToServer({
     type: "handshake",
@@ -181,8 +270,21 @@ socket.onmessage = (event) => {
     case "tt-status":
       console.log("[TT]", data.message || data.phase);
 
-      if (data.phase === "connected") updateTeamTalkStatus(true);
-      if (data.phase === "disconnected" || data.phase === "error") updateTeamTalkStatus(false);
+      if (data.phase === "connected") {
+        uiState.ttConnected = true;
+        updateTeamTalkStatus(true);
+        flashStatusPanel();
+        playSound("tt-connected");
+        speakStatus("TeamTalk connected");
+      }
+
+      if (data.phase === "disconnected" || data.phase === "error") {
+        uiState.ttConnected = false;
+        updateTeamTalkStatus(false);
+        flashStatusPanel();
+        playSound("tt-disconnected");
+        speakStatus("TeamTalk disconnected");
+      }
 
       break;
 
@@ -366,6 +468,13 @@ document.addEventListener("click", (ev) => {
 window.speakText = function (text) {
   if (!text || !window.speechSynthesis) return;
   const utterance = new SpeechSynthesisUtterance(text);
+  // AAC speech uses same engine; status speech waits until this finishes.
+  utterance.rate = 1.0;
+  utterance.pitch = 1.0;
+  utterance.onend = () => {
+    // When AAC speech ends, allow queued status speech to proceed.
+    setTimeout(processStatusSpeechQueue, 50);
+  };
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(utterance);
 };
