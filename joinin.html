@@ -105,8 +105,9 @@
       font-weight: 600;
     }
 
-    /* SOUND TOGGLE */
-    #sound-toggle {
+    /* TOGGLES */
+    #sound-toggle,
+    #presence-toggle {
       padding: 0.7rem;
       background: #fff;
       border: 2px solid #333;
@@ -117,7 +118,8 @@
       transition: background 0.2s ease, box-shadow 0.2s ease;
     }
 
-    #sound-toggle:hover {
+    #sound-toggle:hover,
+    #presence-toggle:hover {
       background: #eaeaea;
     }
 
@@ -203,6 +205,12 @@
       border-bottom: 1px solid #ddd;
       font-size: 0.95rem;
     }
+
+    /* CURRENT CHANNEL HIGHLIGHT */
+    .channel-item.current-channel {
+      background: #ddd;
+      font-weight: 600;
+    }
   </style>
 </head>
 
@@ -239,6 +247,11 @@
     <!-- SOUND TOGGLE -->
     <button id="sound-toggle" onclick="toggleSoundCues()">
       Sound cues: ON
+    </button>
+
+    <!-- PRESENCE TOGGLE -->
+    <button id="presence-toggle" onclick="togglePresenceCues()">
+      Presence tones: ON
     </button>
 
     <button class="aac-button" onclick="speakText(document.getElementById('chat-input').value)">
@@ -292,11 +305,15 @@
   </div>
 </div>
 
-<!-- SOUND CUES (placeholder tiny WAVs; you can swap these later) -->
+<!-- SOUND CUES -->
 <audio id="sound-bridge-connected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
 <audio id="sound-bridge-disconnected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
 <audio id="sound-tt-connected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
 <audio id="sound-tt-disconnected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
+
+<!-- PRESENCE TONES -->
+<audio id="sound-presence-join" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
+<audio id="sound-presence-leave" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
 
 <!-- Load the unified bridge logic -->
 <script src="bridge.js"></script>
