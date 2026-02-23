@@ -6,6 +6,7 @@ const uiState = {
   connected: false,
   ttConnected: false,
   soundEnabled: true,
+  presenceEnabled: true,
   manualDisconnect: false
 };
 
@@ -105,6 +106,15 @@ window.toggleSoundCues = function () {
   }
 };
 
+window.togglePresenceCues = function () {
+  uiState.presenceEnabled = !uiState.presenceEnabled;
+
+  const btn = document.getElementById("presence-toggle");
+  if (btn) {
+    btn.textContent = uiState.presenceEnabled ? "Presence tones: ON" : "Presence tones: OFF";
+  }
+};
+
 
 /* ==========================================================
    STATUS SPEECH (QUEUED, NON-INTERRUPTING)
@@ -175,6 +185,7 @@ function scheduleReconnect() {
   if (uiState.manualDisconnect) return;
   if (reconnectAttempts >= reconnectDelays.length) {
     speakStatus("Bridge offline. Please reconnect manually.");
+    setConnectButtonState("disconnected", "Connect");
     return;
   }
 
@@ -447,20 +458,53 @@ function renderChannelList(channels) {
 
   for (const ch of channels) {
     const li = document.createElement("li");
-    li.textContent = ch.path || ch.name || "/";
-    li.dataset.channelPath = ch.path || "/";
+    const path = ch.path || ch.name || "/";
+    const depth = path === "/" ? 0 : path.split("/").filter(Boolean).length;
+
+    li.textContent = path;
+    li.dataset.channelPath = path;
     li.className = "channel-item";
+    li.style.paddingLeft = `${depth * 16}px`;
+
+    if (path === currentChannelPath) {
+      li.classList.add("current-channel");
+    }
+
     list.appendChild(li);
   }
 }
+
+let lastUserNicknames = new Set();
 
 function renderUserList(users) {
   const list = document.getElementById("user-list");
   if (!list) return;
 
-  list.innerHTML = "";
-
   const relevant = users.filter(u => !!u.nickname);
+  const newSet = new Set(relevant.map(u => u.nickname));
+
+  if (uiState.presenceEnabled) {
+    // Joins
+    for (const nick of newSet) {
+      if (!lastUserNicknames.has(nick)) {
+        playSound("presence-join");
+        speakStatus("Someone joined the channel.");
+        break; // one cue per update
+      }
+    }
+    // Leaves
+    for (const nick of lastUserNicknames) {
+      if (!newSet.has(nick)) {
+        playSound("presence-leave");
+        speakStatus("Someone left the channel.");
+        break; // one cue per update
+      }
+    }
+  }
+
+  lastUserNicknames = newSet;
+
+  list.innerHTML = "";
 
   if (!relevant.length) {
     const li = document.createElement("li");
@@ -481,6 +525,18 @@ function updateCurrentChannelDisplay() {
   if (el) {
     el.textContent = currentChannelPath || "/";
   }
+
+  // Refresh channel highlight
+  const list = document.getElementById("channel-list");
+  if (!list) return;
+  const items = list.querySelectorAll(".channel-item");
+  items.forEach(item => {
+    if (item.dataset.channelPath === currentChannelPath) {
+      item.classList.add("current-channel");
+    } else {
+      item.classList.remove("current-channel");
+    }
+  });
 }
 
 
