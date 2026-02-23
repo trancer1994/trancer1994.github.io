@@ -13,7 +13,18 @@
       display: flex;
       flex-direction: column;
       background: #fafafa;
+      transition: filter 0.2s ease;
     }
+
+    /* Soft focus mode */
+    body.soft-focus {
+      filter: brightness(0.8);
+    }
+
+    /* Adaptive layout modes */
+    body.mode-chat #middle-panel { flex: 2; }
+    body.mode-channels #right-panel { width: 340px; }
+    body.mode-aac #left-panel { width: 320px; }
 
     header {
       padding: 0.8rem 1rem;
@@ -47,6 +58,7 @@
       flex-direction: column;
       gap: 1rem;
       overflow-y: auto;
+      transition: width 0.2s ease;
     }
 
     .aac-button {
@@ -123,6 +135,23 @@
       background: #eaeaea;
     }
 
+    /* QUICK PHRASES */
+    #quick-phrases {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .quick-phrase {
+      padding: 0.6rem;
+      background: #fff;
+      border: 2px solid #555;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      text-align: center;
+    }
+
     /* MIDDLE PANEL — CHAT */
     #middle-panel {
       flex: 1.5;
@@ -130,6 +159,7 @@
       flex-direction: column;
       min-width: 0;
       border-right: 1px solid #ccc;
+      transition: flex 0.2s ease;
     }
 
     #chat {
@@ -170,6 +200,7 @@
       display: flex;
       flex-direction: column;
       min-width: 0;
+      transition: width 0.2s ease;
     }
 
     #right-panel section {
@@ -207,9 +238,24 @@
     }
 
     /* CURRENT CHANNEL HIGHLIGHT */
-    .channel-item.current-channel {
-      background: #ddd;
+    .current-channel {
+      background: #ddd !important;
       font-weight: 600;
+    }
+
+    /* NEW ACTIVITY MARKER */
+    .channel-has-activity {
+      background: #ffe7a8 !important;
+    }
+
+    /* CONVERSATION MEMORY */
+    #conversation-memory {
+      padding: 0.5rem;
+      background: #fff;
+      border-top: 1px solid #ccc;
+      font-size: 0.9rem;
+      height: 120px;
+      overflow-y: auto;
     }
   </style>
 </head>
@@ -227,7 +273,7 @@
 
 <div id="app">
 
-  <!-- LEFT PANEL: AAC-FRIENDLY BUTTONS -->
+  <!-- LEFT PANEL -->
   <div id="left-panel">
 
     <button id="connect-btn" class="aac-button disconnected" onclick="connectEverything()">
@@ -238,21 +284,13 @@
       Disconnect
     </button>
 
-    <!-- STATUS PANEL -->
     <div id="status-panel">
       <div id="bridge-status">Bridge: 🔴 Disconnected</div>
       <div id="tt-status">TeamTalk: 🔴 Disconnected</div>
     </div>
 
-    <!-- SOUND TOGGLE -->
-    <button id="sound-toggle" onclick="toggleSoundCues()">
-      Sound cues: ON
-    </button>
-
-    <!-- PRESENCE TOGGLE -->
-    <button id="presence-toggle" onclick="togglePresenceCues()">
-      Presence tones: ON
-    </button>
+    <button id="sound-toggle" onclick="toggleSoundCues()">Sound cues: ON</button>
+    <button id="presence-toggle" onclick="togglePresenceCues()">Presence tones: ON</button>
 
     <button class="aac-button" onclick="speakText(document.getElementById('chat-input').value)">
       Speak Text
@@ -266,22 +304,32 @@
       Speech → Text
     </button>
 
+    <!-- QUICK PHRASES -->
+    <div id="quick-phrases">
+      <div class="quick-phrase" onclick="sendQuickPhrase('Yes')">Yes</div>
+      <div class="quick-phrase" onclick="sendQuickPhrase('No')">No</div>
+      <div class="quick-phrase" onclick="sendQuickPhrase('Wait a moment')">Wait a moment</div>
+      <div class="quick-phrase" onclick="sendQuickPhrase('I need help')">I need help</div>
+    </div>
+
   </div>
 
-  <!-- MIDDLE PANEL: CHAT -->
+  <!-- MIDDLE PANEL -->
   <div id="middle-panel">
     <div id="chat">
       <p>[Connecting Worlds AAC + TeamTalk Shell]</p>
-      <p>Tap “Connect” to connect to the bridge and TeamTalk. Channels and users will appear on the right.</p>
+      <p>Tap “Connect” to connect to the bridge and TeamTalk.</p>
     </div>
 
     <div id="input-area">
       <input id="chat-input" type="text" placeholder="Type your message…">
       <button id="send-btn" onclick="sendTeamTalkChat()">Send</button>
     </div>
+
+    <div id="conversation-memory"></div>
   </div>
 
-  <!-- RIGHT PANEL: CHANNELS & USERS -->
+  <!-- RIGHT PANEL -->
   <div id="right-panel">
 
     <div id="current-channel">
@@ -306,16 +354,13 @@
 </div>
 
 <!-- SOUND CUES -->
-<audio id="sound-bridge-connected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
-<audio id="sound-bridge-disconnected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
-<audio id="sound-tt-connected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
-<audio id="sound-tt-disconnected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
+<audio id="sound-bridge-connected"></audio>
+<audio id="sound-bridge-disconnected"></audio>
+<audio id="sound-tt-connected"></audio>
+<audio id="sound-tt-disconnected"></audio>
+<audio id="sound-presence-join"></audio>
+<audio id="sound-presence-leave"></audio>
 
-<!-- PRESENCE TONES -->
-<audio id="sound-presence-join" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
-<audio id="sound-presence-leave" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
-
-<!-- Load the unified bridge logic -->
 <script src="bridge.js"></script>
 
 </body>
