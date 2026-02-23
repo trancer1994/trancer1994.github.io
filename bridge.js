@@ -1,41 +1,67 @@
-// ==========================================================
-// UI CONSOLE HELPERS
-// ==========================================================
+/* ==========================================================
+   UI STATE MACHINE
+   ========================================================== */
+
+const uiState = {
+  connected: false,
+  ttConnected: false
+};
+
+const ui = {};
+
+ui.enterConnectedState = () => {
+  uiState.connected = true;
+
+  const connectBtn = document.getElementById("connect-btn");
+  const disconnectBtn = document.getElementById("disconnect-btn");
+  const tapToConnect = document.getElementById("tap-to-connect");
+
+  if (connectBtn) connectBtn.style.display = "none";
+  if (disconnectBtn) disconnectBtn.style.display = "block";
+  if (tapToConnect) tapToConnect.style.display = "none";
+};
+
+ui.enterDisconnectedState = () => {
+  uiState.connected = false;
+  uiState.ttConnected = false;
+
+  const connectBtn = document.getElementById("connect-btn");
+  const disconnectBtn = document.getElementById("disconnect-btn");
+  const tapToConnect = document.getElementById("tap-to-connect");
+
+  if (connectBtn) connectBtn.style.display = "block";
+  if (disconnectBtn) disconnectBtn.style.display = "none";
+  if (tapToConnect) tapToConnect.style.display = "block";
+};
+
+
+/* ==========================================================
+   LOGGING (console only)
+   ========================================================== */
 
 function logToServerConsole(msg) {
-  const box = document.getElementById("server-console");
-  if (!box) return;
-
-  const line = document.createElement("div");
-  line.textContent = msg;
-
-  box.appendChild(line);
-  box.scrollTop = box.scrollHeight;
+  console.log(msg);
 }
 
 function sendToServer(obj) {
-  const json = JSON.stringify(obj);
-  logToServerConsole(">> " + json);
-  socket.send(json);
+  socket.send(JSON.stringify(obj));
 }
 
-// Track current channel on the UI side
 let currentChannelPath = "/";
 
 
-// ==========================================================
-// WEBSOCKET CONNECTION (ENGINE)
-// ==========================================================
+/* ==========================================================
+   WEBSOCKET CONNECTION
+   ========================================================== */
 
-// Auto-connect WebSocket on page load
 const socket = new WebSocket("wss://connectingworlds-bridge.onrender.com");
 
 logToServerConsole("[UI] Connecting to bridge…");
 
 
-// ==========================================================
-// TEAMTALK HANDSHAKE HELPER
-// ==========================================================
+/* ==========================================================
+   TEAMTALK HANDSHAKE
+   ========================================================== */
 
 function startTeamTalkHandshake() {
   logToServerConsole("[UI] Starting TeamTalk handshake…");
@@ -50,15 +76,22 @@ function startTeamTalkHandshake() {
 }
 
 
-// ==========================================================
-// UNIFIED CONNECT BUTTON (RITUAL)
-// ==========================================================
+/* ==========================================================
+   CONNECT BUTTON
+   ========================================================== */
 
 window.connectEverything = function () {
   logToServerConsole("[UI] Connect pressed…");
 
-  if (socket.readyState === WebSocket.OPEN) {
+  if (uiState.connected) {
     logToServerConsole("[UI] Bridge already connected. Beginning TeamTalk arc…");
+    startTeamTalkHandshake();
+    return;
+  }
+
+  if (socket.readyState === WebSocket.OPEN) {
+    logToServerConsole("[UI] Bridge connected. Beginning TeamTalk arc…");
+    ui.enterConnectedState();
     startTeamTalkHandshake();
   } else {
     logToServerConsole("[UI] Waiting for WebSocket to open…");
@@ -66,9 +99,24 @@ window.connectEverything = function () {
 };
 
 
-// ==========================================================
-// WEBSOCKET EVENT HANDLERS
-// ==========================================================
+/* ==========================================================
+   DISCONNECT BUTTON
+   ========================================================== */
+
+window.disconnectEverything = function () {
+  logToServerConsole("[UI] Disconnect pressed…");
+
+  if (socket.readyState === WebSocket.OPEN) {
+    sendToServer({ type: "disconnect" });
+  }
+
+  ui.enterDisconnectedState();
+};
+
+
+/* ==========================================================
+   WEBSOCKET EVENT HANDLERS
+   ========================================================== */
 
 socket.onopen = () => {
   logToServerConsole("[UI] Bridge connected. Sending handshake…");
@@ -87,77 +135,75 @@ socket.onmessage = (event) => {
   try {
     data = JSON.parse(event.data);
   } catch (e) {
-    logToServerConsole("<< [Invalid JSON] " + event.data);
+    console.error("[Invalid JSON]", event.data);
     return;
   }
 
-  logToServerConsole("<< " + JSON.stringify(data));
+  console.log("<<", data);
 
-  // --------------------------------------------------------
-  // ROUTING
-  // --------------------------------------------------------
+  switch (data.type) {
 
-  if (data.type === "handshake-ack") {
-    logToServerConsole("[UI] Handshake ACK from bridge: " + (data.message || ""));
-    // DO NOT auto-start TeamTalk here — Option 2 requires user ritual
-    return;
+    case "status":
+      if (data.message === "connected") {
+        ui.enterConnectedState();
+      }
+      break;
+
+    case "handshake-ack":
+      console.log("[UI] Handshake ACK:", data.message);
+      break;
+
+    case "pong":
+      console.log("[UI] Pong received. Server time:", data.serverTime);
+      break;
+
+    case "tt-status":
+      console.log("[TT]", data.message || data.phase);
+      break;
+
+    case "tt-channel-list":
+      renderChannelList(data.channels || []);
+      break;
+
+    case "tt-user-list":
+      renderUserList(data.users || []);
+      break;
+
+    case "tt-chat":
+      appendChatLine(data.from || "TT", data.text || "", data.channel || "");
+      break;
+
+    case "tt-current-channel":
+      currentChannelPath = data.channel || "/";
+      updateCurrentChannelDisplay();
+      break;
+
+    case "chat":
+      appendChatLine(data.from || "bridge", data.text || "", "[web]");
+      break;
+
+    default:
+      console.log("[UI] Unhandled message type:", data.type);
+      break;
   }
-
-  if (data.type === "pong") {
-    logToServerConsole("[UI] Pong received. Server time: " + data.serverTime);
-    return;
-  }
-
-  if (data.type === "tt-status") {
-    logToServerConsole("[TT] " + (data.message || data.phase || "status"));
-    return;
-  }
-
-  if (data.type === "tt-channel-list") {
-    renderChannelList(data.channels || []);
-    return;
-  }
-
-  if (data.type === "tt-user-list") {
-    renderUserList(data.users || []);
-    return;
-  }
-
-  if (data.type === "tt-chat") {
-    appendChatLine(data.from || "TT", data.text || "", data.channel || "");
-    return;
-  }
-
-  if (data.type === "tt-current-channel") {
-    currentChannelPath = data.channel || "/";
-    updateCurrentChannelDisplay();
-    return;
-  }
-
-  if (data.type === "chat") {
-    appendChatLine(data.from || "bridge", data.text || "", "[web]");
-    return;
-  }
-
-  logToServerConsole("[UI] Unhandled message type: " + data.type);
 };
 
 socket.onerror = (err) => {
-  logToServerConsole("[UI] WebSocket error (see browser console).");
-  console.error("WebSocket error:", err);
+  console.error("[UI] WebSocket error:", err);
 };
 
 socket.onclose = () => {
-  logToServerConsole("[UI] Disconnected from bridge.");
+  console.log("[UI] Disconnected from bridge.");
+  ui.enterDisconnectedState();
 };
 
 
-// ==========================================================
-// PUBLIC HELPERS (EXPOSED ON WINDOW)
-// ==========================================================
+/* ==========================================================
+   PUBLIC HELPERS
+   ========================================================== */
 
 window.requestTeamTalkHandshake = function (options) {
-  logToServerConsole("[UI] Requesting TeamTalk connection…");
+  console.log("[UI] Requesting TeamTalk connection…");
 
   currentChannelPath = options.channel || "/";
   updateCurrentChannelDisplay();
@@ -178,7 +224,6 @@ window.sendChatMessage = function (from, text) {
     from: from,
     text: text
   });
-  logToServerConsole("[UI] Sent chat message from " + from);
 };
 
 window.sendTeamTalkChat = function () {
@@ -198,9 +243,9 @@ window.sendTeamTalkChat = function () {
 };
 
 
-// ==========================================================
-// UI RENDERING HELPERS
-// ==========================================================
+/* ==========================================================
+   UI RENDERING
+   ========================================================== */
 
 function appendChatLine(from, text, channelLabel) {
   const chatBox = document.getElementById("chat");
@@ -268,9 +313,9 @@ function updateCurrentChannelDisplay() {
 }
 
 
-// ==========================================================
-// CHANNEL CLICK HANDLER
-// ==========================================================
+/* ==========================================================
+   CHANNEL CLICK HANDLER
+   ========================================================== */
 
 document.addEventListener("click", (ev) => {
   const target = ev.target;
@@ -289,9 +334,9 @@ document.addEventListener("click", (ev) => {
 });
 
 
-// ==========================================================
-// AAC SPEECH HELPERS
-// ==========================================================
+/* ==========================================================
+   AAC SPEECH HELPERS (kept)
+   ========================================================== */
 
 window.speakText = function (text) {
   if (!text || !window.speechSynthesis) return;
@@ -326,3 +371,14 @@ window.startSpeechToText = function () {
 
   recog.start();
 };
+
+
+/* ==========================================================
+   CLEANUP ON UNLOAD
+   ========================================================== */
+
+window.addEventListener("beforeunload", () => {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ type: "disconnect" }));
+  }
+});
