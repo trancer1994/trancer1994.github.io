@@ -19,6 +19,8 @@ ui.enterConnectedState = () => {
   if (connectBtn) connectBtn.style.display = "none";
   if (disconnectBtn) disconnectBtn.style.display = "block";
   if (tapToConnect) tapToConnect.style.display = "none";
+
+  updateBridgeStatus(true);
 };
 
 ui.enterDisconnectedState = () => {
@@ -32,7 +34,27 @@ ui.enterDisconnectedState = () => {
   if (connectBtn) connectBtn.style.display = "block";
   if (disconnectBtn) disconnectBtn.style.display = "none";
   if (tapToConnect) tapToConnect.style.display = "block";
+
+  updateBridgeStatus(false);
+  updateTeamTalkStatus(false);
 };
+
+
+/* ==========================================================
+   STATUS INDICATORS
+   ========================================================== */
+
+function updateBridgeStatus(connected) {
+  const el = document.getElementById("bridge-status");
+  if (!el) return;
+  el.textContent = connected ? "Bridge: 🟢 Connected" : "Bridge: 🔴 Disconnected";
+}
+
+function updateTeamTalkStatus(connected) {
+  const el = document.getElementById("tt-status");
+  if (!el) return;
+  el.textContent = connected ? "TeamTalk: 🟢 Connected" : "TeamTalk: 🔴 Disconnected";
+}
 
 
 /* ==========================================================
@@ -90,7 +112,6 @@ window.connectEverything = function () {
   }
 
   if (socket.readyState === WebSocket.OPEN) {
-    logToServerConsole("[UI] Bridge connected. Beginning TeamTalk arc…");
     ui.enterConnectedState();
     startTeamTalkHandshake();
   } else {
@@ -119,7 +140,7 @@ window.disconnectEverything = function () {
    ========================================================== */
 
 socket.onopen = () => {
-  logToServerConsole("[UI] Bridge connected. Sending handshake…");
+  updateBridgeStatus(true);
 
   sendToServer({
     type: "handshake",
@@ -159,6 +180,10 @@ socket.onmessage = (event) => {
 
     case "tt-status":
       console.log("[TT]", data.message || data.phase);
+
+      if (data.phase === "connected") updateTeamTalkStatus(true);
+      if (data.phase === "disconnected" || data.phase === "error") updateTeamTalkStatus(false);
+
       break;
 
     case "tt-channel-list":
