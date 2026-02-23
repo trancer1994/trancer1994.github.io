@@ -7,7 +7,8 @@ const uiState = {
   ttConnected: false,
   soundEnabled: true,
   presenceEnabled: true,
-  manualDisconnect: false
+  manualDisconnect: false,
+  softFocusCount: 0
 };
 
 const ui = {};
@@ -117,6 +118,23 @@ window.togglePresenceCues = function () {
 
 
 /* ==========================================================
+   SOFT FOCUS MODE
+   ========================================================== */
+
+function enterSoftFocus() {
+  uiState.softFocusCount++;
+  document.body.classList.add("soft-focus");
+}
+
+function exitSoftFocus() {
+  uiState.softFocusCount = Math.max(0, uiState.softFocusCount - 1);
+  if (uiState.softFocusCount === 0) {
+    document.body.classList.remove("soft-focus");
+  }
+}
+
+
+/* ==========================================================
    STATUS SPEECH (QUEUED, NON-INTERRUPTING)
    ========================================================== */
 
@@ -137,7 +155,9 @@ function processStatusSpeechQueue() {
   utterance.rate = 1.0;
   utterance.pitch = 1.0;
 
+  utterance.onstart = () => enterSoftFocus();
   utterance.onend = () => {
+    exitSoftFocus();
     setTimeout(processStatusSpeechQueue, 50);
   };
 
@@ -343,12 +363,13 @@ function attachSocketHandlers(ws) {
         break;
 
       case "tt-chat":
-        appendChatLine(data.from || "TT", data.text || "", data.channel || "");
+        handleTeamTalkChat(data);
         break;
 
       case "tt-current-channel":
         currentChannelPath = data.channel || "/";
         updateCurrentChannelDisplay();
+        clearChannelActivity(currentChannelPath);
         break;
 
       case "chat":
@@ -426,6 +447,40 @@ window.sendTeamTalkChat = function () {
 
 
 /* ==========================================================
+   CONVERSATION MEMORY (Chapter 8)
+   ========================================================== */
+
+const conversationMemory = [];
+const MAX_MEMORY = 20;
+
+function addToConversationMemory(from, text, channel) {
+  conversationMemory.push({
+    from,
+    text,
+    channel,
+    timestamp: Date.now()
+  });
+  if (conversationMemory.length > MAX_MEMORY) {
+    conversationMemory.shift();
+  }
+  renderConversationMemory();
+}
+
+function renderConversationMemory() {
+  const panel = document.getElementById("conversation-memory");
+  if (!panel) return;
+
+  panel.innerHTML = "";
+  for (const item of conversationMemory) {
+    const div = document.createElement("div");
+    const chLabel = item.channel ? `[${item.channel}] ` : "";
+    div.textContent = `${chLabel}${item.from}: ${item.text}`;
+    panel.appendChild(div);
+  }
+}
+
+
+/* ==========================================================
    UI RENDERING
    ========================================================== */
 
@@ -439,6 +494,19 @@ function appendChatLine(from, text, channelLabel) {
 
   chatBox.appendChild(p);
   chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function handleTeamTalkChat(data) {
+  const from = data.from || "TT";
+  const text = data.text || "";
+  const channel = data.channel || "";
+
+  appendChatLine(from, text, channel);
+  addToConversationMemory(from, text, channel);
+
+  if (channel && channel !== currentChannelPath) {
+    markChannelActivity(channel);
+  }
 }
 
 function renderChannelList(channels) {
@@ -484,20 +552,18 @@ function renderUserList(users) {
   const newSet = new Set(relevant.map(u => u.nickname));
 
   if (uiState.presenceEnabled) {
-    // Joins
     for (const nick of newSet) {
       if (!lastUserNicknames.has(nick)) {
         playSound("presence-join");
         speakStatus("Someone joined the channel.");
-        break; // one cue per update
+        break;
       }
     }
-    // Leaves
     for (const nick of lastUserNicknames) {
       if (!newSet.has(nick)) {
         playSound("presence-leave");
         speakStatus("Someone left the channel.");
-        break; // one cue per update
+        break;
       }
     }
   }
@@ -526,15 +592,42 @@ function updateCurrentChannelDisplay() {
     el.textContent = currentChannelPath || "/";
   }
 
-  // Refresh channel highlight
   const list = document.getElementById("channel-list");
   if (!list) return;
   const items = list.querySelectorAll(".channel-item");
   items.forEach(item => {
     if (item.dataset.channelPath === currentChannelPath) {
       item.classList.add("current-channel");
+      item.classList.remove("channel-has-activity");
     } else {
       item.classList.remove("current-channel");
+    }
+  });
+}
+
+
+/* ==========================================================
+   NEW ACTIVITY MARKERS (Chapter 6)
+   ========================================================== */
+
+function markChannelActivity(path) {
+  const list = document.getElementById("channel-list");
+  if (!list) return;
+  const items = list.querySelectorAll(".channel-item");
+  items.forEach(item => {
+    if (item.dataset.channelPath === path && path !== currentChannelPath) {
+      item.classList.add("channel-has-activity");
+    }
+  });
+}
+
+function clearChannelActivity(path) {
+  const list = document.getElementById("channel-list");
+  if (!list) return;
+  const items = list.querySelectorAll(".channel-item");
+  items.forEach(item => {
+    if (item.dataset.channelPath === path) {
+      item.classList.remove("channel-has-activity");
     }
   });
 }
@@ -552,17 +645,28 @@ document.addEventListener("click", (ev) => {
     const path = target.dataset.channelPath || "/";
     currentChannelPath = path;
     updateCurrentChannelDisplay();
+    clearChannelActivity(path);
+    setAdaptiveMode("channels");
 
     sendToServer({
       type: "tt-join",
       channel: path
     });
   }
+
+  if (target.classList.contains("aac-button")) {
+    setAdaptiveMode("aac");
+  }
 });
+
+const chatInput = document.getElementById("chat-input");
+if (chatInput) {
+  chatInput.addEventListener("focus", () => setAdaptiveMode("chat"));
+}
 
 
 /* ==========================================================
-   AAC SPEECH HELPERS (kept)
+   AAC SPEECH HELPERS (kept, with soft focus)
    ========================================================== */
 
 window.speakText = function (text) {
@@ -570,7 +674,9 @@ window.speakText = function (text) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = 1.0;
   utterance.pitch = 1.0;
+  utterance.onstart = () => enterSoftFocus();
   utterance.onend = () => {
+    exitSoftFocus();
     setTimeout(processStatusSpeechQueue, 50);
   };
   window.speechSynthesis.cancel();
@@ -603,6 +709,32 @@ window.startSpeechToText = function () {
 
   recog.start();
 };
+
+
+/* ==========================================================
+   AAC QUICK PHRASES (Chapter 9)
+   ========================================================== */
+
+window.sendQuickPhrase = function (text) {
+  if (!text) return;
+  const input = document.getElementById("chat-input");
+  if (input) {
+    input.value = text;
+  }
+  window.speakText(text);
+};
+
+
+/* ==========================================================
+   ADAPTIVE LAYOUT (Chapter 10)
+   ========================================================== */
+
+function setAdaptiveMode(mode) {
+  document.body.classList.remove("mode-chat", "mode-channels", "mode-aac");
+  if (mode === "chat") document.body.classList.add("mode-chat");
+  if (mode === "channels") document.body.classList.add("mode-channels");
+  if (mode === "aac") document.body.classList.add("mode-aac");
+}
 
 
 /* ==========================================================
