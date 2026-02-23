@@ -64,6 +64,21 @@
       background: #eaeaea;
     }
 
+    /* STATUS PANEL */
+    #status-panel {
+      padding: 0.5rem;
+      background: #fff;
+      border: 2px solid #333;
+      border-radius: 6px;
+      font-size: 1rem;
+      line-height: 1.4;
+    }
+
+    #status-panel div {
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
     /* MIDDLE PANEL — CHAT */
     #middle-panel {
       flex: 1.5;
@@ -146,18 +161,6 @@
       border-bottom: 1px solid #ddd;
       font-size: 0.95rem;
     }
-
-    /* SERVER CONSOLE */
-    #server-console {
-      background: #111;
-      color: #0f0;
-      padding: 10px;
-      height: 200px;
-      overflow-y: auto;
-      font-family: monospace;
-      font-size: 14px;
-      border-top: 2px solid #333;
-    }
   </style>
 </head>
 
@@ -177,9 +180,19 @@
   <!-- LEFT PANEL: AAC-FRIENDLY BUTTONS -->
   <div id="left-panel">
 
-    <button class="aac-button" onclick="connectEverything()">
+    <button id="connect-btn" class="aac-button" onclick="connectEverything()">
       Connect
     </button>
+
+    <button id="disconnect-btn" class="aac-button" onclick="disconnectEverything()" style="display:none;">
+      Disconnect
+    </button>
+
+    <!-- STATUS PANEL -->
+    <div id="status-panel">
+      <div id="bridge-status">Bridge: 🔴 Disconnected</div>
+      <div id="tt-status">TeamTalk: 🔴 Disconnected</div>
+    </div>
 
     <button class="aac-button" onclick="speakText(document.getElementById('chat-input').value)">
       Speak Text
@@ -232,8 +245,11 @@
   </div>
 </div>
 
-<!-- SERVER CONSOLE -->
-<div id="server-console"></div>
+<!-- SOUND CUES -->
+<audio id="sound-bridge-connected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
+<audio id="sound-bridge-disconnected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
+<audio id="sound-tt-connected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
+<audio id="sound-tt-disconnected" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
 
 <!-- Load the unified bridge logic -->
 <script src="bridge.js"></script>
