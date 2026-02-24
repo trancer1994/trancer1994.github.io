@@ -1,11 +1,11 @@
 /* ==========================================================
+   BRIDGE.JS — MODERN ARCHITECTURE WITH SAFETY + LOGGING
+   ========================================================== */
+
+/* ==========================================================
    MODULE 1 — CORE STATE MACHINE + LIFECYCLE CONTROLLER
    ========================================================== */
 
-/**
- * Centralised application state.
- * This replaces scattered booleans with a single authoritative source of truth.
- */
 const AppState = {
   // Connection state
   bridgeConnected: false,
@@ -30,15 +30,27 @@ const AppState = {
   // TT handshake timing
   ttHandshakeTimer: null,
 
+  // Channel state
+  currentChannelPath: "/",
+
   // Memory + status speech
   statusSpeechQueue: [],
   conversationMemory: [],
   MAX_MEMORY: 20
 };
 
-/* ==========================================================
-   SOFT FOCUS MODE
-   ========================================================== */
+/* ----------------------------------------------------------
+   LOGGING (ENHANCED, CONSOLE ONLY)
+   ---------------------------------------------------------- */
+
+const Log = {
+  ui: (...args) => console.log("[UI]", ...args),
+  bridge: (...args) => console.log("[BRIDGE]", ...args),
+  tt: (...args) => console.log("[TT]", ...args),
+  warn: (...args) => console.warn("[WARN]", ...args),
+  error: (...args) => console.error("[ERROR]", ...args),
+  raw: (...args) => console.log(...args)
+};
 
 function enterSoftFocus() {
   AppState.softFocusCount++;
@@ -51,10 +63,6 @@ function exitSoftFocus() {
     document.body.classList.remove("soft-focus");
   }
 }
-
-/* ==========================================================
-   STATUS SPEECH (QUEUED, NON-INTERRUPTING)
-   ========================================================== */
 
 function processStatusSpeechQueue() {
   if (!AppState.soundEnabled) {
@@ -86,10 +94,6 @@ function speakStatus(text) {
   processStatusSpeechQueue();
 }
 
-/* ==========================================================
-   LIFECYCLE HELPERS
-   ========================================================== */
-
 function resetReconnectAttempts() {
   AppState.reconnectAttempts = 0;
 }
@@ -102,10 +106,6 @@ function incrementSocketId() {
 function isStaleSocket(id) {
   return id !== AppState.currentSocketId;
 }
-
-/* ==========================================================
-   PUBLIC STATE GETTERS
-   ========================================================== */
 
 function isBridgeConnected() {
   return AppState.bridgeConnected;
@@ -122,20 +122,15 @@ function isManualDisconnect() {
 function setManualDisconnect(flag) {
   AppState.manualDisconnect = flag;
 }
+
+/* Stub for optional activity clearing */
+function clearChannelActivity() {}
+
 /* ==========================================================
    MODULE 2 — UI CONTROLLER
    ========================================================== */
 
-/**
- * The UIController centralises all DOM updates, sound cues,
- * status indicators, and user‑visible state transitions.
- *
- * This replaces scattered UI helpers with a clean, predictable API.
- */
 const UIController = {
-  /* ----------------------------------------------------------
-     BUTTON STATE
-     ---------------------------------------------------------- */
   setConnectButtonState(state, label) {
     const btn = document.getElementById("connect-btn");
     if (!btn) return;
@@ -146,9 +141,6 @@ const UIController = {
     if (label) btn.textContent = label;
   },
 
-  /* ----------------------------------------------------------
-     STATUS PANEL FLASH
-     ---------------------------------------------------------- */
   flashStatusPanel() {
     const panel = document.getElementById("status-panel");
     if (!panel) return;
@@ -157,9 +149,6 @@ const UIController = {
     setTimeout(() => panel.classList.remove("status-changed"), 250);
   },
 
-  /* ----------------------------------------------------------
-     ENTER CONNECTED STATE
-     ---------------------------------------------------------- */
   enterConnectedState() {
     AppState.bridgeConnected = true;
     AppState.manualDisconnect = false;
@@ -178,9 +167,6 @@ const UIController = {
     speakStatus("Bridge connected");
   },
 
-  /* ----------------------------------------------------------
-     ENTER DISCONNECTED STATE
-     ---------------------------------------------------------- */
   enterDisconnectedState() {
     AppState.bridgeConnected = false;
     AppState.ttConnected = false;
@@ -202,9 +188,6 @@ const UIController = {
     speakStatus("Bridge disconnected");
   },
 
-  /* ----------------------------------------------------------
-     STATUS INDICATORS
-     ---------------------------------------------------------- */
   updateBridgeStatus(connected) {
     const el = document.getElementById("bridge-status");
     if (!el) return;
@@ -223,9 +206,6 @@ const UIController = {
       : "TeamTalk: 🔴 Disconnected";
   },
 
-  /* ----------------------------------------------------------
-     SOUND CUES
-     ---------------------------------------------------------- */
   playSound(name) {
     if (!AppState.soundEnabled) return;
 
@@ -258,9 +238,6 @@ const UIController = {
     }
   },
 
-  /* ----------------------------------------------------------
-     CHAT UI HELPERS
-     ---------------------------------------------------------- */
   appendChatLine(from, text, tag = "") {
     const chat = document.getElementById("chat-log");
     if (!chat) return;
@@ -273,17 +250,27 @@ const UIController = {
     chat.scrollTop = chat.scrollHeight;
   },
 
-  /* ----------------------------------------------------------
-     CHANNEL + USER LIST HELPERS
-     ---------------------------------------------------------- */
   renderChannelList(channels) {
     const el = document.getElementById("channel-list");
     if (!el) return;
 
     el.innerHTML = "";
-    channels.forEach((ch) => {
+    (channels || []).forEach((ch) => {
       const li = document.createElement("li");
-      li.textContent = ch;
+
+      if (typeof ch === "string") {
+        li.textContent = ch;
+      } else if (ch && typeof ch === "object") {
+        li.textContent =
+          ch.name ||
+          ch.path ||
+          ch.displayName ||
+          ch.id ||
+          JSON.stringify(ch);
+      } else {
+        li.textContent = String(ch);
+      }
+
       el.appendChild(li);
     });
   },
@@ -293,40 +280,49 @@ const UIController = {
     if (!el) return;
 
     el.innerHTML = "";
-    users.forEach((u) => {
+    (users || []).forEach((u) => {
       const li = document.createElement("li");
-      li.textContent = u;
+
+      if (typeof u === "string") {
+        li.textContent = u;
+      } else if (u && typeof u === "object") {
+        li.textContent =
+          u.nickname ||
+          u.name ||
+          u.username ||
+          u.displayName ||
+          u.id ||
+          JSON.stringify(u);
+      } else {
+        li.textContent = String(u);
+      }
+
       el.appendChild(li);
     });
+  },
+
+  updateCurrentChannelDisplay() {
+    const el = document.getElementById("current-channel");
+    if (!el) return;
+    el.textContent = AppState.currentChannelPath || "/";
   }
 };
 
-/* Expose toggles globally for your existing HTML buttons */
 window.toggleSoundCues = () => UIController.toggleSoundCues();
 window.togglePresenceCues = () => UIController.togglePresenceCues();
+
 /* ==========================================================
    MODULE 3 — WEBSOCKET MANAGER (BRIDGE)
    ========================================================== */
 
-/**
- * WebSocketManager handles:
- * - connecting to the bridge
- * - reconnect logic
- * - stale-socket protection
- * - message dispatch
- * - integration with forced teardown
- */
 const WebSocketManager = {
   connect() {
-    console.log("[UI] Connecting to bridge…");
+    Log.ui("Connecting to bridge…");
 
-    // Reset manual disconnect intent
     AppState.manualDisconnect = false;
 
-    // Increment socket ID to invalidate old events
     const socketId = incrementSocketId();
 
-    // Close any existing socket cleanly
     if (AppState.socket && AppState.socket.readyState === WebSocket.OPEN) {
       try {
         AppState.socket.close();
@@ -336,9 +332,6 @@ const WebSocketManager = {
     const ws = new WebSocket("wss://connectingworlds-bridge.onrender.com");
     AppState.socket = ws;
 
-    /* ----------------------------------------------------------
-       ON OPEN
-       ---------------------------------------------------------- */
     ws.onopen = () => {
       if (isStaleSocket(socketId)) return;
 
@@ -352,7 +345,6 @@ const WebSocketManager = {
       UIController.playSound("bridge-connected");
       speakStatus("Bridge connected");
 
-      // Initial handshake
       WebSocketManager.send({
         type: "handshake",
         client: "web-ui",
@@ -361,7 +353,6 @@ const WebSocketManager = {
         timestamp: Date.now()
       });
 
-      // Delay TT handshake slightly to avoid race conditions
       AppState.ttHandshakeTimer = setTimeout(() => {
         if (!AppState.manualDisconnect && !isStaleSocket(socketId)) {
           TeamTalkManager.startHandshake();
@@ -369,9 +360,6 @@ const WebSocketManager = {
       }, 250);
     };
 
-    /* ----------------------------------------------------------
-       ON MESSAGE
-       ---------------------------------------------------------- */
     ws.onmessage = (event) => {
       if (isStaleSocket(socketId)) return;
 
@@ -379,29 +367,23 @@ const WebSocketManager = {
       try {
         data = JSON.parse(event.data);
       } catch (e) {
-        console.error("[Invalid JSON]", event.data);
+        Log.error("Invalid JSON from bridge:", event.data);
         return;
       }
 
-      console.log("<<", data);
+      Log.raw("<<", data);
       MessageRouter.route(data);
     };
 
-    /* ----------------------------------------------------------
-       ON ERROR
-       ---------------------------------------------------------- */
     ws.onerror = (err) => {
       if (isStaleSocket(socketId)) return;
-      console.error("[UI] WebSocket error:", err);
+      Log.error("WebSocket error:", err);
     };
 
-    /* ----------------------------------------------------------
-       ON CLOSE
-       ---------------------------------------------------------- */
     ws.onclose = () => {
       if (isStaleSocket(socketId)) return;
 
-      console.log("[UI] Disconnected from bridge.");
+      Log.ui("Disconnected from bridge.");
 
       AppState.bridgeConnected = false;
       AppState.ttConnected = false;
@@ -418,18 +400,12 @@ const WebSocketManager = {
     };
   },
 
-  /* ----------------------------------------------------------
-     SEND WRAPPER
-     ---------------------------------------------------------- */
   send(obj) {
     const ws = AppState.socket;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify(obj));
   },
 
-  /* ----------------------------------------------------------
-     RECONNECT SCHEDULER
-     ---------------------------------------------------------- */
   scheduleReconnect() {
     if (AppState.manualDisconnect) return;
 
@@ -455,14 +431,11 @@ const WebSocketManager = {
         return;
       }
 
-      console.log(`[UI] Reconnect attempt ${AppState.reconnectAttempts}…`);
+      Log.ui(`Reconnect attempt ${AppState.reconnectAttempts}…`);
       WebSocketManager.connect();
     }, delay);
   },
 
-  /* ----------------------------------------------------------
-     FORCE CLOSE (used by ForcedTeardownEngine)
-     ---------------------------------------------------------- */
   forceClose() {
     const ws = AppState.socket;
     if (!ws) return;
@@ -476,31 +449,19 @@ const WebSocketManager = {
     } catch (_) {}
 
     AppState.socket = null;
-    incrementSocketId(); // invalidate any pending events
+    incrementSocketId();
   }
 };
+
 /* ==========================================================
    MODULE 4 — TEAMTALK MANAGER
    ========================================================== */
 
-/**
- * TeamTalkManager handles:
- * - initiating the TT handshake
- * - receiving TT status updates
- * - updating UI state
- * - routing TT chat
- * - rendering channels and users
- * - forced teardown integration
- */
 const TeamTalkManager = {
-  /* ----------------------------------------------------------
-     START HANDSHAKE
-     ---------------------------------------------------------- */
   startHandshake() {
-    console.log("[UI] Starting TeamTalk handshake…");
+    Log.ui("Starting TeamTalk handshake…");
     speakStatus("Connecting to TeamTalk");
 
-    // Use your existing TT connection parameters
     TeamTalkManager.requestHandshake({
       host: "tt.seedy.cc",
       port: 10333,
@@ -510,16 +471,12 @@ const TeamTalkManager = {
     });
   },
 
-  /* ----------------------------------------------------------
-     SEND HANDSHAKE REQUEST
-     ---------------------------------------------------------- */
   requestHandshake(options) {
-    console.log("[UI] Requesting TeamTalk connection…");
+    Log.ui("Requesting TeamTalk connection…");
 
     AppState.currentChannelPath = options.channel || "/";
-    UIController.updateCurrentChannelDisplay?.();
+    UIController.updateCurrentChannelDisplay();
 
-    // Delay slightly to avoid race conditions
     AppState.ttHandshakeTimer = setTimeout(() => {
       WebSocketManager.send({
         type: "tt-handshake",
@@ -532,12 +489,14 @@ const TeamTalkManager = {
     }, 200);
   },
 
-  /* ----------------------------------------------------------
-     HANDLE TT STATUS
-     ---------------------------------------------------------- */
   handleStatus(data) {
-    const phase = data.phase || data.message;
-    console.log("[TT]", phase);
+    let phase = data.phase || data.message;
+
+    if (phase && typeof phase === "object") {
+      phase = phase.status || phase.phase || JSON.stringify(phase);
+    }
+
+    Log.tt("Status:", phase);
 
     if (phase === "connected") {
       AppState.ttConnected = true;
@@ -558,62 +517,53 @@ const TeamTalkManager = {
     }
   },
 
-  /* ----------------------------------------------------------
-     HANDLE CHANNEL LIST
-     ---------------------------------------------------------- */
   handleChannelList(data) {
-    const channels = data.channels || [];
+    const channels = data.channels || data.list || [];
+    Log.tt("Channel list:", channels);
     UIController.renderChannelList(channels);
   },
 
-  /* ----------------------------------------------------------
-     HANDLE USER LIST
-     ---------------------------------------------------------- */
   handleUserList(data) {
-    const users = data.users || [];
+    const users = data.users || data.list || [];
+    Log.tt("User list:", users);
     UIController.renderUserList(users);
   },
 
-  /* ----------------------------------------------------------
-     HANDLE TT CHAT
-     ---------------------------------------------------------- */
   handleChat(data) {
-    const from = data.from || "unknown";
+    let from = "unknown";
+
+    if (typeof data.from === "string") {
+      from = data.from;
+    } else if (data.from && typeof data.from === "object") {
+      from =
+        data.from.nickname ||
+        data.from.name ||
+        data.from.username ||
+        data.from.displayName ||
+        "unknown";
+    }
+
     const text = data.text || "";
+    Log.tt("Chat:", { from, text });
     UIController.appendChatLine(from, text, "[tt]");
   },
 
-  /* ----------------------------------------------------------
-     HANDLE CURRENT CHANNEL
-     ---------------------------------------------------------- */
   handleCurrentChannel(data) {
-    AppState.currentChannelPath = data.channel || "/";
-    UIController.updateCurrentChannelDisplay?.();
-
-    // Optional: clear activity indicators
-    if (typeof clearChannelActivity === "function") {
-      clearChannelActivity(AppState.currentChannelPath);
-    }
+    AppState.currentChannelPath = data.channel || data.path || "/";
+    UIController.updateCurrentChannelDisplay();
+    clearChannelActivity(AppState.currentChannelPath);
   },
 
-  /* ----------------------------------------------------------
-     FORCE TEARDOWN (called by ForcedTeardownEngine)
-     ---------------------------------------------------------- */
   forceDisconnect() {
     AppState.ttConnected = false;
     UIController.updateTeamTalkStatus(false);
 
-    // Clear handshake timer
     if (AppState.ttHandshakeTimer) {
       clearTimeout(AppState.ttHandshakeTimer);
       AppState.ttHandshakeTimer = null;
     }
   }
 };
-
-/* ----------------------------------------------------------
-   PUBLIC API (kept for compatibility with your HTML)
-   ---------------------------------------------------------- */
 
 window.requestTeamTalkHandshake = (options) =>
   TeamTalkManager.requestHandshake(options);
@@ -633,23 +583,14 @@ window.sendTeamTalkChat = function () {
 
   input.value = "";
 };
+
 /* ==========================================================
    MODULE 5 — MESSAGE ROUTER
    ========================================================== */
 
-/**
- * MessageRouter receives all parsed WebSocket messages
- * and dispatches them to the correct subsystem.
- *
- * This keeps WebSocketManager clean and makes the system
- * easier to maintain and extend.
- */
 const MessageRouter = {
   route(msg) {
     switch (msg.type) {
-      /* ------------------------------------------------------
-         BRIDGE STATUS
-         ------------------------------------------------------ */
       case "status":
         if (msg.message === "connected") {
           UIController.enterConnectedState();
@@ -657,16 +598,13 @@ const MessageRouter = {
         break;
 
       case "handshake-ack":
-        console.log("[UI] Handshake ACK:", msg.message);
+        Log.ui("Handshake ACK:", msg.message);
         break;
 
       case "pong":
-        console.log("[UI] Pong received. Server time:", msg.serverTime);
+        Log.bridge("Pong received. Server time:", msg.serverTime);
         break;
 
-      /* ------------------------------------------------------
-         TEAMTALK STATUS + EVENTS
-         ------------------------------------------------------ */
       case "tt-status":
         TeamTalkManager.handleStatus(msg);
         break;
@@ -687,108 +625,64 @@ const MessageRouter = {
         TeamTalkManager.handleCurrentChannel(msg);
         break;
 
-      /* ------------------------------------------------------
-         WEB CHAT
-         ------------------------------------------------------ */
       case "chat":
-        UIController.appendChatLine(msg.from || "bridge", msg.text || "", "[web]");
+        UIController.appendChatLine(
+          msg.from || "bridge",
+          msg.text || "",
+          "[web]"
+        );
         break;
 
-      /* ------------------------------------------------------
-         UNHANDLED
-         ------------------------------------------------------ */
       default:
-        console.log("[UI] Unhandled message type:", msg.type);
+        Log.warn("Unhandled message type:", msg.type, msg);
         break;
     }
   }
 };
+
 /* ==========================================================
    MODULE 6 — FORCED TEARDOWN ENGINE
    ========================================================== */
 
-/**
- * ForcedTeardownEngine is the authoritative shutdown path.
- *
- * It:
- * - kills the WebSocket immediately
- * - invalidates stale sockets
- * - prevents reconnect attempts
- * - clears TT handshake timers
- * - forces TT disconnected
- * - forces UI disconnected
- * - guarantees no ghost sessions remain
- *
- * This module is the antidote to the TT beta’s inconsistent
- * disconnect semantics.
- */
 const ForcedTeardownEngine = {
   run() {
-    console.log("[UI] Forcing full teardown…");
+    Log.ui("Forcing full teardown…");
 
-    /* ------------------------------------------------------
-       1. Stop reconnect logic
-       ------------------------------------------------------ */
     AppState.manualDisconnect = true;
     AppState.reconnectAttempts = 0;
 
-    /* ------------------------------------------------------
-       2. Kill the WebSocket immediately
-       ------------------------------------------------------ */
     WebSocketManager.forceClose();
 
-    /* ------------------------------------------------------
-       3. Invalidate any pending socket events
-       ------------------------------------------------------ */
     incrementSocketId();
 
-    /* ------------------------------------------------------
-       4. Kill TeamTalk state + timers
-       ------------------------------------------------------ */
     TeamTalkManager.forceDisconnect();
 
-    /* ------------------------------------------------------
-       5. Force UI into disconnected state
-       ------------------------------------------------------ */
     UIController.enterDisconnectedState();
   }
 };
+
 /* ==========================================================
    MODULE 7 — PUBLIC API + BUTTON BINDINGS
    ========================================================== */
 
-/**
- * This module exposes the functions your HTML already calls:
- * - connectEverything()
- * - disconnectEverything()
- * - sendChatMessage()
- *
- * Internally, these now route through the modern architecture.
- */
-
 window.connectEverything = function () {
-  console.log("[UI] Connect pressed…");
+  Log.ui("Connect pressed…");
 
-  // Reset manual disconnect intent
   AppState.manualDisconnect = false;
 
-  // Update UI immediately
   UIController.setConnectButtonState("connecting", "Connecting…");
   speakStatus("Connecting to bridge");
 
-  // If socket is closed or missing, create a new one
   if (!AppState.socket || AppState.socket.readyState === WebSocket.CLOSED) {
     WebSocketManager.connect();
     return;
   }
 
-  // If already connected, just ensure TT handshake
   if (AppState.bridgeConnected && AppState.ttConnected) {
     speakStatus("Already connected");
     return;
   }
 
-  // If socket is open but TT not connected, start handshake
   if (AppState.socket.readyState === WebSocket.OPEN) {
     UIController.enterConnectedState();
     TeamTalkManager.startHandshake();
@@ -798,20 +692,14 @@ window.connectEverything = function () {
 };
 
 window.disconnectEverything = function () {
-  console.log("[UI] Disconnect pressed…");
+  Log.ui("Disconnect pressed…");
 
-  // Best-effort notify the server
   try {
     WebSocketManager.send({ type: "disconnect" });
   } catch (_) {}
 
-  // Perform full forced teardown
   ForcedTeardownEngine.run();
 };
-
-/* ----------------------------------------------------------
-   CHAT API
-   ---------------------------------------------------------- */
 
 window.sendChatMessage = function (from, text) {
   WebSocketManager.send({
