@@ -1,178 +1,72 @@
 /* ==========================================================
-   GLOBAL UI STATE
+   MODULE 1 — CORE STATE MACHINE + LIFECYCLE CONTROLLER
    ========================================================== */
 
-const uiState = {
-  connected: false,
+/**
+ * Centralised application state.
+ * This replaces scattered booleans with a single authoritative source of truth.
+ */
+const AppState = {
+  // Connection state
+  bridgeConnected: false,
   ttConnected: false,
+
+  // User intent
+  manualDisconnect: false,
+
+  // Reconnect logic
+  reconnectAttempts: 0,
+  reconnectDelays: [3000, 10000, 30000],
+
+  // UI behaviour
   soundEnabled: true,
   presenceEnabled: true,
-  manualDisconnect: false,
-  softFocusCount: 0
+  softFocusCount: 0,
+
+  // Internal lifecycle control
+  currentSocketId: 0,
+  socket: null,
+
+  // TT handshake timing
+  ttHandshakeTimer: null,
+
+  // Memory + status speech
+  statusSpeechQueue: [],
+  conversationMemory: [],
+  MAX_MEMORY: 20
 };
-
-const ui = {};
-
-let socket = null;
-let currentSocketId = 0; // to ignore stale sockets
-let reconnectAttempts = 0;
-const reconnectDelays = [3000, 10000, 30000]; // ms
-let currentChannelPath = "/";
-let lastUserNicknames = new Set();
-
-const statusSpeechQueue = [];
-const conversationMemory = [];
-const MAX_MEMORY = 20;
-
-
-/* ==========================================================
-   BASIC UI HELPERS
-   ========================================================== */
-
-function setConnectButtonState(state, label) {
-  const btn = document.getElementById("connect-btn");
-  if (!btn) return;
-  btn.classList.remove("connecting", "connected", "disconnected");
-  btn.classList.add(state);
-  if (label) btn.textContent = label;
-}
-
-function flashStatusPanel() {
-  const panel = document.getElementById("status-panel");
-  if (!panel) return;
-  panel.classList.add("status-changed");
-  setTimeout(() => panel.classList.remove("status-changed"), 250);
-}
-
-ui.enterConnectedState = () => {
-  uiState.connected = true;
-  uiState.manualDisconnect = false;
-
-  const connectBtn = document.getElementById("connect-btn");
-  const disconnectBtn = document.getElementById("disconnect-btn");
-
-  if (connectBtn) connectBtn.style.display = "none";
-  if (disconnectBtn) disconnectBtn.style.display = "block";
-
-  updateBridgeStatus(true);
-  flashStatusPanel();
-  setConnectButtonState("connected", "Connect");
-  playSound("bridge-connected");
-  speakStatus("Bridge connected");
-};
-
-ui.enterDisconnectedState = () => {
-  uiState.connected = false;
-  uiState.ttConnected = false;
-
-  const connectBtn = document.getElementById("connect-btn");
-  const disconnectBtn = document.getElementById("disconnect-btn");
-
-  if (connectBtn) {
-    connectBtn.style.display = "block";
-    setConnectButtonState("disconnected", "Connect");
-  }
-  if (disconnectBtn) disconnectBtn.style.display = "none";
-
-  updateBridgeStatus(false);
-  updateTeamTalkStatus(false);
-  flashStatusPanel();
-
-  playSound("bridge-disconnected");
-  speakStatus("Bridge disconnected");
-};
-
-
-/* ==========================================================
-   STATUS INDICATORS
-   ========================================================== */
-
-function updateBridgeStatus(connected) {
-  const el = document.getElementById("bridge-status");
-  if (!el) return;
-  el.textContent = connected ? "Bridge: 🟢 Connected" : "Bridge: 🔴 Disconnected";
-}
-
-function updateTeamTalkStatus(connected) {
-  const el = document.getElementById("tt-status");
-  if (!el) return;
-  el.textContent = connected ? "TeamTalk: 🟢 Connected" : "TeamTalk: 🔴 Disconnected";
-}
-
-
-/* ==========================================================
-   SOUND CUES (FILE-BASED) + OPTIONAL TONE GENERATOR
-   ========================================================== */
-
-function playSound(name) {
-  if (!uiState.soundEnabled) return;
-  const el = document.getElementById(`sound-${name}`);
-  if (el) {
-    el.currentTime = 0;
-    el.play().catch(() => {});
-  }
-}
-
-// Optional pure‑tone fallback if you want it later:
-// function playTone(freq, duration = 120) {
-//   if (!uiState.soundEnabled) return;
-//   const ctx = new (window.AudioContext || window.webkitAudioContext)();
-//   const osc = ctx.createOscillator();
-//   osc.frequency.value = freq;
-//   osc.connect(ctx.destination);
-//   osc.start();
-//   osc.stop(ctx.currentTime + duration / 1000);
-// }
-
-window.toggleSoundCues = function () {
-  uiState.soundEnabled = !uiState.soundEnabled;
-  const btn = document.getElementById("sound-toggle");
-  if (btn) {
-    btn.textContent = uiState.soundEnabled ? "Sound cues: ON" : "Sound cues: OFF";
-  }
-};
-
-window.togglePresenceCues = function () {
-  uiState.presenceEnabled = !uiState.presenceEnabled;
-  const btn = document.getElementById("presence-toggle");
-  if (btn) {
-    btn.textContent = uiState.presenceEnabled ? "Presence tones: ON" : "Presence tones: OFF";
-  }
-};
-
 
 /* ==========================================================
    SOFT FOCUS MODE
    ========================================================== */
 
 function enterSoftFocus() {
-  uiState.softFocusCount++;
+  AppState.softFocusCount++;
   document.body.classList.add("soft-focus");
 }
 
 function exitSoftFocus() {
-  uiState.softFocusCount = Math.max(0, uiState.softFocusCount - 1);
-  if (uiState.softFocusCount === 0) {
+  AppState.softFocusCount = Math.max(0, AppState.softFocusCount - 1);
+  if (AppState.softFocusCount === 0) {
     document.body.classList.remove("soft-focus");
   }
 }
-
 
 /* ==========================================================
    STATUS SPEECH (QUEUED, NON-INTERRUPTING)
    ========================================================== */
 
 function processStatusSpeechQueue() {
-  if (!uiState.soundEnabled) {
-    statusSpeechQueue.length = 0;
+  if (!AppState.soundEnabled) {
+    AppState.statusSpeechQueue.length = 0;
     return;
   }
 
   if (!("speechSynthesis" in window)) return;
   if (speechSynthesis.speaking) return;
-  if (!statusSpeechQueue.length) return;
+  if (!AppState.statusSpeechQueue.length) return;
 
-  const text = statusSpeechQueue.shift();
+  const text = AppState.statusSpeechQueue.shift();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = 1.0;
   utterance.pitch = 1.0;
@@ -187,290 +81,542 @@ function processStatusSpeechQueue() {
 }
 
 function speakStatus(text) {
-  if (!uiState.soundEnabled) return;
-  statusSpeechQueue.push(text);
+  if (!AppState.soundEnabled) return;
+  AppState.statusSpeechQueue.push(text);
   processStatusSpeechQueue();
 }
 
-
 /* ==========================================================
-   LOGGING + SEND
+   LIFECYCLE HELPERS
    ========================================================== */
 
-function logToServerConsole(msg) {
-  console.log(msg);
+function resetReconnectAttempts() {
+  AppState.reconnectAttempts = 0;
 }
 
-function sendToServer(obj) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) return;
-  socket.send(JSON.stringify(obj));
+function incrementSocketId() {
+  AppState.currentSocketId++;
+  return AppState.currentSocketId;
 }
 
+function isStaleSocket(id) {
+  return id !== AppState.currentSocketId;
+}
 
 /* ==========================================================
-   SINGLE-SOCKET MANAGEMENT + AUTO-RECONNECT
+   PUBLIC STATE GETTERS
    ========================================================== */
 
-function createSocket() {
-  // Close any existing socket cleanly
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    try {
-      socket.close();
-    } catch (_) {}
-  }
+function isBridgeConnected() {
+  return AppState.bridgeConnected;
+}
 
-  const thisId = ++currentSocketId;
-  const ws = new WebSocket("wss://connectingworlds-bridge.onrender.com");
-  socket = ws;
+function isTTConnected() {
+  return AppState.ttConnected;
+}
 
-  logToServerConsole("[UI] Connecting to bridge…");
+function isManualDisconnect() {
+  return AppState.manualDisconnect;
+}
 
-  ws.onopen = () => {
-    if (thisId !== currentSocketId) return; // stale
-    reconnectAttempts = 0;
-    updateBridgeStatus(true);
-    flashStatusPanel();
-    setConnectButtonState("connected", "Connect");
-    playSound("bridge-connected");
+function setManualDisconnect(flag) {
+  AppState.manualDisconnect = flag;
+}
+/* ==========================================================
+   MODULE 2 — UI CONTROLLER
+   ========================================================== */
+
+/**
+ * The UIController centralises all DOM updates, sound cues,
+ * status indicators, and user‑visible state transitions.
+ *
+ * This replaces scattered UI helpers with a clean, predictable API.
+ */
+const UIController = {
+  /* ----------------------------------------------------------
+     BUTTON STATE
+     ---------------------------------------------------------- */
+  setConnectButtonState(state, label) {
+    const btn = document.getElementById("connect-btn");
+    if (!btn) return;
+
+    btn.classList.remove("connecting", "connected", "disconnected");
+    btn.classList.add(state);
+
+    if (label) btn.textContent = label;
+  },
+
+  /* ----------------------------------------------------------
+     STATUS PANEL FLASH
+     ---------------------------------------------------------- */
+  flashStatusPanel() {
+    const panel = document.getElementById("status-panel");
+    if (!panel) return;
+
+    panel.classList.add("status-changed");
+    setTimeout(() => panel.classList.remove("status-changed"), 250);
+  },
+
+  /* ----------------------------------------------------------
+     ENTER CONNECTED STATE
+     ---------------------------------------------------------- */
+  enterConnectedState() {
+    AppState.bridgeConnected = true;
+    AppState.manualDisconnect = false;
+
+    const connectBtn = document.getElementById("connect-btn");
+    const disconnectBtn = document.getElementById("disconnect-btn");
+
+    if (connectBtn) connectBtn.style.display = "none";
+    if (disconnectBtn) disconnectBtn.style.display = "block";
+
+    UIController.updateBridgeStatus(true);
+    UIController.flashStatusPanel();
+    UIController.setConnectButtonState("connected", "Connect");
+
+    UIController.playSound("bridge-connected");
     speakStatus("Bridge connected");
+  },
 
-    // Initial handshake with bridge
-    sendToServer({
-      type: "handshake",
-      client: "web-ui",
-      protocol: 1,
-      capabilities: ["chat", "status", "tt-handshake", "ping"],
-      timestamp: Date.now()
+  /* ----------------------------------------------------------
+     ENTER DISCONNECTED STATE
+     ---------------------------------------------------------- */
+  enterDisconnectedState() {
+    AppState.bridgeConnected = false;
+    AppState.ttConnected = false;
+
+    const connectBtn = document.getElementById("connect-btn");
+    const disconnectBtn = document.getElementById("disconnect-btn");
+
+    if (connectBtn) {
+      connectBtn.style.display = "block";
+      UIController.setConnectButtonState("disconnected", "Connect");
+    }
+    if (disconnectBtn) disconnectBtn.style.display = "none";
+
+    UIController.updateBridgeStatus(false);
+    UIController.updateTeamTalkStatus(false);
+    UIController.flashStatusPanel();
+
+    UIController.playSound("bridge-disconnected");
+    speakStatus("Bridge disconnected");
+  },
+
+  /* ----------------------------------------------------------
+     STATUS INDICATORS
+     ---------------------------------------------------------- */
+  updateBridgeStatus(connected) {
+    const el = document.getElementById("bridge-status");
+    if (!el) return;
+
+    el.textContent = connected
+      ? "Bridge: 🟢 Connected"
+      : "Bridge: 🔴 Disconnected";
+  },
+
+  updateTeamTalkStatus(connected) {
+    const el = document.getElementById("tt-status");
+    if (!el) return;
+
+    el.textContent = connected
+      ? "TeamTalk: 🟢 Connected"
+      : "TeamTalk: 🔴 Disconnected";
+  },
+
+  /* ----------------------------------------------------------
+     SOUND CUES
+     ---------------------------------------------------------- */
+  playSound(name) {
+    if (!AppState.soundEnabled) return;
+
+    const el = document.getElementById(`sound-${name}`);
+    if (el) {
+      el.currentTime = 0;
+      el.play().catch(() => {});
+    }
+  },
+
+  toggleSoundCues() {
+    AppState.soundEnabled = !AppState.soundEnabled;
+
+    const btn = document.getElementById("sound-toggle");
+    if (btn) {
+      btn.textContent = AppState.soundEnabled
+        ? "Sound cues: ON"
+        : "Sound cues: OFF";
+    }
+  },
+
+  togglePresenceCues() {
+    AppState.presenceEnabled = !AppState.presenceEnabled;
+
+    const btn = document.getElementById("presence-toggle");
+    if (btn) {
+      btn.textContent = AppState.presenceEnabled
+        ? "Presence tones: ON"
+        : "Presence tones: OFF";
+    }
+  },
+
+  /* ----------------------------------------------------------
+     CHAT UI HELPERS
+     ---------------------------------------------------------- */
+  appendChatLine(from, text, tag = "") {
+    const chat = document.getElementById("chat-log");
+    if (!chat) return;
+
+    const line = document.createElement("div");
+    line.className = "chat-line";
+    line.textContent = `${from}${tag ? " " + tag : ""}: ${text}`;
+
+    chat.appendChild(line);
+    chat.scrollTop = chat.scrollHeight;
+  },
+
+  /* ----------------------------------------------------------
+     CHANNEL + USER LIST HELPERS
+     ---------------------------------------------------------- */
+  renderChannelList(channels) {
+    const el = document.getElementById("channel-list");
+    if (!el) return;
+
+    el.innerHTML = "";
+    channels.forEach((ch) => {
+      const li = document.createElement("li");
+      li.textContent = ch;
+      el.appendChild(li);
     });
+  },
 
-    // Delay TeamTalk handshake slightly to avoid race conditions
-    setTimeout(() => {
-      if (!uiState.manualDisconnect && thisId === currentSocketId) {
-        startTeamTalkHandshake();
-      }
-    }, 250);
-  };
+  renderUserList(users) {
+    const el = document.getElementById("user-list");
+    if (!el) return;
 
-  ws.onmessage = (event) => {
-    if (thisId !== currentSocketId) return; // ignore stale socket
+    el.innerHTML = "";
+    users.forEach((u) => {
+      const li = document.createElement("li");
+      li.textContent = u;
+      el.appendChild(li);
+    });
+  }
+};
 
-    let data;
-    try {
-      data = JSON.parse(event.data);
-    } catch (e) {
-      console.error("[Invalid JSON]", event.data);
-      return;
+/* Expose toggles globally for your existing HTML buttons */
+window.toggleSoundCues = () => UIController.toggleSoundCues();
+window.togglePresenceCues = () => UIController.togglePresenceCues();
+/* ==========================================================
+   MODULE 3 — WEBSOCKET MANAGER (BRIDGE)
+   ========================================================== */
+
+/**
+ * WebSocketManager handles:
+ * - connecting to the bridge
+ * - reconnect logic
+ * - stale-socket protection
+ * - message dispatch
+ * - integration with forced teardown
+ */
+const WebSocketManager = {
+  connect() {
+    console.log("[UI] Connecting to bridge…");
+
+    // Reset manual disconnect intent
+    AppState.manualDisconnect = false;
+
+    // Increment socket ID to invalidate old events
+    const socketId = incrementSocketId();
+
+    // Close any existing socket cleanly
+    if (AppState.socket && AppState.socket.readyState === WebSocket.OPEN) {
+      try {
+        AppState.socket.close();
+      } catch (_) {}
     }
 
-    console.log("<<", data);
+    const ws = new WebSocket("wss://connectingworlds-bridge.onrender.com");
+    AppState.socket = ws;
 
-    switch (data.type) {
+    /* ----------------------------------------------------------
+       ON OPEN
+       ---------------------------------------------------------- */
+    ws.onopen = () => {
+      if (isStaleSocket(socketId)) return;
 
-      case "status":
-        if (data.message === "connected") {
-          ui.enterConnectedState();
+      AppState.reconnectAttempts = 0;
+      AppState.bridgeConnected = true;
+
+      UIController.updateBridgeStatus(true);
+      UIController.flashStatusPanel();
+      UIController.setConnectButtonState("connected", "Connect");
+
+      UIController.playSound("bridge-connected");
+      speakStatus("Bridge connected");
+
+      // Initial handshake
+      WebSocketManager.send({
+        type: "handshake",
+        client: "web-ui",
+        protocol: 1,
+        capabilities: ["chat", "status", "tt-handshake", "ping"],
+        timestamp: Date.now()
+      });
+
+      // Delay TT handshake slightly to avoid race conditions
+      AppState.ttHandshakeTimer = setTimeout(() => {
+        if (!AppState.manualDisconnect && !isStaleSocket(socketId)) {
+          TeamTalkManager.startHandshake();
         }
-        break;
+      }, 250);
+    };
 
-      case "handshake-ack":
-        console.log("[UI] Handshake ACK:", data.message);
-        break;
+    /* ----------------------------------------------------------
+       ON MESSAGE
+       ---------------------------------------------------------- */
+    ws.onmessage = (event) => {
+      if (isStaleSocket(socketId)) return;
 
-      case "pong":
-        console.log("[UI] Pong received. Server time:", data.serverTime);
-        break;
+      let data;
+      try {
+        data = JSON.parse(event.data);
+      } catch (e) {
+        console.error("[Invalid JSON]", event.data);
+        return;
+      }
 
-      case "tt-status":
-        handleTeamTalkStatus(data);
-        break;
+      console.log("<<", data);
+      MessageRouter.route(data);
+    };
 
-      case "tt-channel-list":
-        renderChannelList(data.channels || []);
-        break;
+    /* ----------------------------------------------------------
+       ON ERROR
+       ---------------------------------------------------------- */
+    ws.onerror = (err) => {
+      if (isStaleSocket(socketId)) return;
+      console.error("[UI] WebSocket error:", err);
+    };
 
-      case "tt-user-list":
-        renderUserList(data.users || []);
-        break;
+    /* ----------------------------------------------------------
+       ON CLOSE
+       ---------------------------------------------------------- */
+    ws.onclose = () => {
+      if (isStaleSocket(socketId)) return;
 
-      case "tt-chat":
-        handleTeamTalkChat(data);
-        break;
+      console.log("[UI] Disconnected from bridge.");
 
-      case "tt-current-channel":
-        currentChannelPath = data.channel || "/";
-        updateCurrentChannelDisplay();
-        clearChannelActivity(currentChannelPath);
-        break;
+      AppState.bridgeConnected = false;
+      AppState.ttConnected = false;
 
-      case "chat":
-        appendChatLine(data.from || "bridge", data.text || "", "[web]");
-        break;
+      UIController.updateBridgeStatus(false);
+      UIController.updateTeamTalkStatus(false);
+      UIController.flashStatusPanel();
 
-      default:
-        console.log("[UI] Unhandled message type:", data.type);
-        break;
-    }
-  };
+      if (!AppState.manualDisconnect) {
+        WebSocketManager.scheduleReconnect();
+      } else {
+        UIController.enterDisconnectedState();
+      }
+    };
+  },
 
-  ws.onerror = (err) => {
-    if (thisId !== currentSocketId) return;
-    console.error("[UI] WebSocket error:", err);
-  };
+  /* ----------------------------------------------------------
+     SEND WRAPPER
+     ---------------------------------------------------------- */
+  send(obj) {
+    const ws = AppState.socket;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify(obj));
+  },
 
-  ws.onclose = () => {
-    if (thisId !== currentSocketId) return;
-    console.log("[UI] Disconnected from bridge.");
-    updateBridgeStatus(false);
-    updateTeamTalkStatus(false);
-    flashStatusPanel();
+  /* ----------------------------------------------------------
+     RECONNECT SCHEDULER
+     ---------------------------------------------------------- */
+  scheduleReconnect() {
+    if (AppState.manualDisconnect) return;
 
-    if (!uiState.manualDisconnect) {
-      scheduleReconnect();
-    } else {
-      ui.enterDisconnectedState();
-    }
-  };
-}
+    const attempts = AppState.reconnectAttempts;
+    const delays = AppState.reconnectDelays;
 
-function scheduleReconnect() {
-  if (uiState.manualDisconnect) return;
-  if (reconnectAttempts >= reconnectDelays.length) {
-    speakStatus("Bridge offline. Please reconnect manually.");
-    setConnectButtonState("disconnected", "Connect");
-    return;
-  }
-
-  const delay = reconnectDelays[reconnectAttempts];
-  reconnectAttempts += 1;
-
-  speakStatus(`Connection lost. Reconnecting, attempt ${reconnectAttempts}.`);
-  setConnectButtonState("connecting", "Reconnecting…");
-
-  setTimeout(() => {
-    if (navigator && navigator.onLine === false) {
-      speakStatus("Offline. Please check your internet connection.");
-      setConnectButtonState("disconnected", "Connect");
+    if (attempts >= delays.length) {
+      speakStatus("Bridge offline. Please reconnect manually.");
+      UIController.setConnectButtonState("disconnected", "Connect");
       return;
     }
-    logToServerConsole(`[UI] Reconnect attempt ${reconnectAttempts}…`);
-    createSocket();
-  }, delay);
-}
 
+    const delay = delays[attempts];
+    AppState.reconnectAttempts++;
 
-/* ==========================================================
-   TEAMTALK HANDSHAKE + STATUS
-   ========================================================== */
+    speakStatus(`Connection lost. Reconnecting, attempt ${AppState.reconnectAttempts}.`);
+    UIController.setConnectButtonState("connecting", "Reconnecting…");
 
-function startTeamTalkHandshake() {
-  logToServerConsole("[UI] Starting TeamTalk handshake…");
-  speakStatus("Connecting to TeamTalk");
+    setTimeout(() => {
+      if (navigator && navigator.onLine === false) {
+        speakStatus("Offline. Please check your internet connection.");
+        UIController.setConnectButtonState("disconnected", "Connect");
+        return;
+      }
 
-  requestTeamTalkHandshake({
-    host: "tt.seedy.cc",
-    port: 10333,
-    username: "admin",
-    password: "admin",
-    channel: "/"
-  });
-}
+      console.log(`[UI] Reconnect attempt ${AppState.reconnectAttempts}…`);
+      WebSocketManager.connect();
+    }, delay);
+  },
 
-function handleTeamTalkStatus(data) {
-  console.log("[TT]", data.message || data.phase);
+  /* ----------------------------------------------------------
+     FORCE CLOSE (used by ForcedTeardownEngine)
+     ---------------------------------------------------------- */
+  forceClose() {
+    const ws = AppState.socket;
+    if (!ws) return;
 
-  if (data.phase === "connected") {
-    uiState.ttConnected = true;
-    updateTeamTalkStatus(true);
-    flashStatusPanel();
-    playSound("tt-connected");
-    speakStatus("TeamTalk connected");
-  }
-
-  if (data.phase === "disconnected" || data.phase === "error") {
-    uiState.ttConnected = false;
-    updateTeamTalkStatus(false);
-    flashStatusPanel();
-    playSound("tt-disconnected");
-    speakStatus("TeamTalk disconnected");
-  }
-}
-
-
-/* ==========================================================
-   CONNECT / DISCONNECT BUTTONS
-   ========================================================== */
-
-window.connectEverything = function () {
-  logToServerConsole("[UI] Connect pressed…");
-  uiState.manualDisconnect = false;
-
-  const btn = document.getElementById("connect-btn");
-  if (btn) setConnectButtonState("connecting", "Reconnecting…");
-
-  if (!socket || socket.readyState === WebSocket.CLOSED) {
-    createSocket();
-    return;
-  }
-
-  if (uiState.connected && uiState.ttConnected) {
-    speakStatus("Already connected.");
-    return;
-  }
-
-  if (socket.readyState === WebSocket.OPEN) {
-    ui.enterConnectedState();
-    startTeamTalkHandshake();
-  } else {
-    logToServerConsole("[UI] Waiting for WebSocket to open…");
-    speakStatus("Connecting to bridge");
-  }
-};
-
-window.disconnectEverything = function () {
-  logToServerConsole("[UI] Disconnect pressed…");
-  uiState.manualDisconnect = true;
-  reconnectAttempts = 0;
-
-  if (socket && socket.readyState === WebSocket.OPEN) {
     try {
-      sendToServer({ type: "disconnect" });
-      socket.close();
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onerror = null;
+      ws.onclose = null;
+      ws.close();
     } catch (_) {}
+
+    AppState.socket = null;
+    incrementSocketId(); // invalidate any pending events
   }
-
-  ui.enterDisconnectedState();
 };
-
-
 /* ==========================================================
-   PUBLIC HELPERS
+   MODULE 4 — TEAMTALK MANAGER
    ========================================================== */
 
-window.requestTeamTalkHandshake = function (options) {
-  console.log("[UI] Requesting TeamTalk connection…");
+/**
+ * TeamTalkManager handles:
+ * - initiating the TT handshake
+ * - receiving TT status updates
+ * - updating UI state
+ * - routing TT chat
+ * - rendering channels and users
+ * - forced teardown integration
+ */
+const TeamTalkManager = {
+  /* ----------------------------------------------------------
+     START HANDSHAKE
+     ---------------------------------------------------------- */
+  startHandshake() {
+    console.log("[UI] Starting TeamTalk handshake…");
+    speakStatus("Connecting to TeamTalk");
 
-  currentChannelPath = options.channel || "/";
-  updateCurrentChannelDisplay();
-
-  setTimeout(() => {
-    sendToServer({
-      type: "tt-handshake",
-      ttHost: options.host,
-      ttPort: options.port,
-      username: options.username,
-      password: options.password,
-      channel: options.channel
+    // Use your existing TT connection parameters
+    TeamTalkManager.requestHandshake({
+      host: "tt.seedy.cc",
+      port: 10333,
+      username: "admin",
+      password: "admin",
+      channel: "/"
     });
-  }, 200);
+  },
+
+  /* ----------------------------------------------------------
+     SEND HANDSHAKE REQUEST
+     ---------------------------------------------------------- */
+  requestHandshake(options) {
+    console.log("[UI] Requesting TeamTalk connection…");
+
+    AppState.currentChannelPath = options.channel || "/";
+    UIController.updateCurrentChannelDisplay?.();
+
+    // Delay slightly to avoid race conditions
+    AppState.ttHandshakeTimer = setTimeout(() => {
+      WebSocketManager.send({
+        type: "tt-handshake",
+        ttHost: options.host,
+        ttPort: options.port,
+        username: options.username,
+        password: options.password,
+        channel: options.channel
+      });
+    }, 200);
+  },
+
+  /* ----------------------------------------------------------
+     HANDLE TT STATUS
+     ---------------------------------------------------------- */
+  handleStatus(data) {
+    const phase = data.phase || data.message;
+    console.log("[TT]", phase);
+
+    if (phase === "connected") {
+      AppState.ttConnected = true;
+      UIController.updateTeamTalkStatus(true);
+      UIController.flashStatusPanel();
+      UIController.playSound("tt-connected");
+      speakStatus("TeamTalk connected");
+      return;
+    }
+
+    if (phase === "disconnected" || phase === "error") {
+      AppState.ttConnected = false;
+      UIController.updateTeamTalkStatus(false);
+      UIController.flashStatusPanel();
+      UIController.playSound("tt-disconnected");
+      speakStatus("TeamTalk disconnected");
+      return;
+    }
+  },
+
+  /* ----------------------------------------------------------
+     HANDLE CHANNEL LIST
+     ---------------------------------------------------------- */
+  handleChannelList(data) {
+    const channels = data.channels || [];
+    UIController.renderChannelList(channels);
+  },
+
+  /* ----------------------------------------------------------
+     HANDLE USER LIST
+     ---------------------------------------------------------- */
+  handleUserList(data) {
+    const users = data.users || [];
+    UIController.renderUserList(users);
+  },
+
+  /* ----------------------------------------------------------
+     HANDLE TT CHAT
+     ---------------------------------------------------------- */
+  handleChat(data) {
+    const from = data.from || "unknown";
+    const text = data.text || "";
+    UIController.appendChatLine(from, text, "[tt]");
+  },
+
+  /* ----------------------------------------------------------
+     HANDLE CURRENT CHANNEL
+     ---------------------------------------------------------- */
+  handleCurrentChannel(data) {
+    AppState.currentChannelPath = data.channel || "/";
+    UIController.updateCurrentChannelDisplay?.();
+
+    // Optional: clear activity indicators
+    if (typeof clearChannelActivity === "function") {
+      clearChannelActivity(AppState.currentChannelPath);
+    }
+  },
+
+  /* ----------------------------------------------------------
+     FORCE TEARDOWN (called by ForcedTeardownEngine)
+     ---------------------------------------------------------- */
+  forceDisconnect() {
+    AppState.ttConnected = false;
+    UIController.updateTeamTalkStatus(false);
+
+    // Clear handshake timer
+    if (AppState.ttHandshakeTimer) {
+      clearTimeout(AppState.ttHandshakeTimer);
+      AppState.ttHandshakeTimer = null;
+    }
+  }
 };
 
-window.sendChatMessage = function (from, text) {
-  sendToServer({
-    type: "chat",
-    from: from,
-    text: text
-  });
-};
+/* ----------------------------------------------------------
+   PUBLIC API (kept for compatibility with your HTML)
+   ---------------------------------------------------------- */
+
+window.requestTeamTalkHandshake = (options) =>
+  TeamTalkManager.requestHandshake(options);
 
 window.sendTeamTalkChat = function () {
   const input = document.getElementById("chat-input");
@@ -479,314 +625,198 @@ window.sendTeamTalkChat = function () {
   const text = input.value.trim();
   if (!text) return;
 
-  sendToServer({
+  WebSocketManager.send({
     type: "tt-chat",
-    channel: currentChannelPath,
+    channel: AppState.currentChannelPath,
     text
   });
 
   input.value = "";
 };
-
-
 /* ==========================================================
-   CONVERSATION MEMORY
+   MODULE 5 — MESSAGE ROUTER
    ========================================================== */
 
-function addToConversationMemory(from, text, channel) {
-  conversationMemory.push({
+/**
+ * MessageRouter receives all parsed WebSocket messages
+ * and dispatches them to the correct subsystem.
+ *
+ * This keeps WebSocketManager clean and makes the system
+ * easier to maintain and extend.
+ */
+const MessageRouter = {
+  route(msg) {
+    switch (msg.type) {
+      /* ------------------------------------------------------
+         BRIDGE STATUS
+         ------------------------------------------------------ */
+      case "status":
+        if (msg.message === "connected") {
+          UIController.enterConnectedState();
+        }
+        break;
+
+      case "handshake-ack":
+        console.log("[UI] Handshake ACK:", msg.message);
+        break;
+
+      case "pong":
+        console.log("[UI] Pong received. Server time:", msg.serverTime);
+        break;
+
+      /* ------------------------------------------------------
+         TEAMTALK STATUS + EVENTS
+         ------------------------------------------------------ */
+      case "tt-status":
+        TeamTalkManager.handleStatus(msg);
+        break;
+
+      case "tt-channel-list":
+        TeamTalkManager.handleChannelList(msg);
+        break;
+
+      case "tt-user-list":
+        TeamTalkManager.handleUserList(msg);
+        break;
+
+      case "tt-chat":
+        TeamTalkManager.handleChat(msg);
+        break;
+
+      case "tt-current-channel":
+        TeamTalkManager.handleCurrentChannel(msg);
+        break;
+
+      /* ------------------------------------------------------
+         WEB CHAT
+         ------------------------------------------------------ */
+      case "chat":
+        UIController.appendChatLine(msg.from || "bridge", msg.text || "", "[web]");
+        break;
+
+      /* ------------------------------------------------------
+         UNHANDLED
+         ------------------------------------------------------ */
+      default:
+        console.log("[UI] Unhandled message type:", msg.type);
+        break;
+    }
+  }
+};
+/* ==========================================================
+   MODULE 6 — FORCED TEARDOWN ENGINE
+   ========================================================== */
+
+/**
+ * ForcedTeardownEngine is the authoritative shutdown path.
+ *
+ * It:
+ * - kills the WebSocket immediately
+ * - invalidates stale sockets
+ * - prevents reconnect attempts
+ * - clears TT handshake timers
+ * - forces TT disconnected
+ * - forces UI disconnected
+ * - guarantees no ghost sessions remain
+ *
+ * This module is the antidote to the TT beta’s inconsistent
+ * disconnect semantics.
+ */
+const ForcedTeardownEngine = {
+  run() {
+    console.log("[UI] Forcing full teardown…");
+
+    /* ------------------------------------------------------
+       1. Stop reconnect logic
+       ------------------------------------------------------ */
+    AppState.manualDisconnect = true;
+    AppState.reconnectAttempts = 0;
+
+    /* ------------------------------------------------------
+       2. Kill the WebSocket immediately
+       ------------------------------------------------------ */
+    WebSocketManager.forceClose();
+
+    /* ------------------------------------------------------
+       3. Invalidate any pending socket events
+       ------------------------------------------------------ */
+    incrementSocketId();
+
+    /* ------------------------------------------------------
+       4. Kill TeamTalk state + timers
+       ------------------------------------------------------ */
+    TeamTalkManager.forceDisconnect();
+
+    /* ------------------------------------------------------
+       5. Force UI into disconnected state
+       ------------------------------------------------------ */
+    UIController.enterDisconnectedState();
+  }
+};
+/* ==========================================================
+   MODULE 7 — PUBLIC API + BUTTON BINDINGS
+   ========================================================== */
+
+/**
+ * This module exposes the functions your HTML already calls:
+ * - connectEverything()
+ * - disconnectEverything()
+ * - sendChatMessage()
+ *
+ * Internally, these now route through the modern architecture.
+ */
+
+window.connectEverything = function () {
+  console.log("[UI] Connect pressed…");
+
+  // Reset manual disconnect intent
+  AppState.manualDisconnect = false;
+
+  // Update UI immediately
+  UIController.setConnectButtonState("connecting", "Connecting…");
+  speakStatus("Connecting to bridge");
+
+  // If socket is closed or missing, create a new one
+  if (!AppState.socket || AppState.socket.readyState === WebSocket.CLOSED) {
+    WebSocketManager.connect();
+    return;
+  }
+
+  // If already connected, just ensure TT handshake
+  if (AppState.bridgeConnected && AppState.ttConnected) {
+    speakStatus("Already connected");
+    return;
+  }
+
+  // If socket is open but TT not connected, start handshake
+  if (AppState.socket.readyState === WebSocket.OPEN) {
+    UIController.enterConnectedState();
+    TeamTalkManager.startHandshake();
+  } else {
+    speakStatus("Connecting to bridge");
+  }
+};
+
+window.disconnectEverything = function () {
+  console.log("[UI] Disconnect pressed…");
+
+  // Best-effort notify the server
+  try {
+    WebSocketManager.send({ type: "disconnect" });
+  } catch (_) {}
+
+  // Perform full forced teardown
+  ForcedTeardownEngine.run();
+};
+
+/* ----------------------------------------------------------
+   CHAT API
+   ---------------------------------------------------------- */
+
+window.sendChatMessage = function (from, text) {
+  WebSocketManager.send({
+    type: "chat",
     from,
-    text,
-    channel,
-    timestamp: Date.now()
+    text
   });
-  if (conversationMemory.length > MAX_MEMORY) {
-    conversationMemory.shift();
-  }
-  renderConversationMemory();
-}
-
-function renderConversationMemory() {
-  const panel = document.getElementById("conversation-memory");
-  if (!panel) return;
-
-  panel.innerHTML = "";
-  for (const item of conversationMemory) {
-    const div = document.createElement("div");
-    const chLabel = item.channel ? `[${item.channel}] ` : "";
-    div.textContent = `${chLabel}${item.from}: ${item.text}`;
-    panel.appendChild(div);
-  }
-}
-
-
-/* ==========================================================
-   UI RENDERING
-   ========================================================== */
-
-function appendChatLine(from, text, channelLabel) {
-  const chatBox = document.getElementById("chat");
-  if (!chatBox) return;
-
-  const p = document.createElement("p");
-  const prefix = channelLabel ? `[${channelLabel}] ` : "";
-  p.textContent = `${prefix}${from}: ${text}`;
-
-  chatBox.appendChild(p);
-  chatBox.scrollTop = chatBox.scrollHeight;
-}
-
-function handleTeamTalkChat(data) {
-  const from = data.from || "TT";
-  const text = data.text || "";
-  const channel = data.channel || "";
-
-  appendChatLine(from, text, channel);
-  addToConversationMemory(from, text, channel);
-
-  if (channel && channel !== currentChannelPath) {
-    markChannelActivity(channel);
-  }
-}
-
-function renderChannelList(channels) {
-  const list = document.getElementById("channel-list");
-  if (!list) return;
-
-  list.innerHTML = "";
-
-  if (!channels.length) {
-    const li = document.createElement("li");
-    li.textContent = "[No channels]";
-    list.appendChild(li);
-    return;
-  }
-
-  channels.sort((a, b) => (a.path || a.name || "").localeCompare(b.path || b.name || ""));
-
-  for (const ch of channels) {
-    const li = document.createElement("li");
-    const path = ch.path || ch.name || "/";
-    const depth = path === "/" ? 0 : path.split("/").filter(Boolean).length;
-
-    li.textContent = path;
-    li.dataset.channelPath = path;
-    li.className = "channel-item";
-    li.style.paddingLeft = `${depth * 16}px`;
-
-    if (path === currentChannelPath) {
-      li.classList.add("current-channel");
-    }
-
-    list.appendChild(li);
-  }
-}
-
-function renderUserList(users) {
-  const list = document.getElementById("user-list");
-  if (!list) return;
-
-  const relevant = users.filter(u => !!u.nickname);
-  const newSet = new Set(relevant.map(u => u.nickname));
-
-  if (uiState.presenceEnabled) {
-    for (const nick of newSet) {
-      if (!lastUserNicknames.has(nick)) {
-        playSound("presence-join");
-        speakStatus("Someone joined the channel.");
-        break;
-      }
-    }
-    for (const nick of lastUserNicknames) {
-      if (!newSet.has(nick)) {
-        playSound("presence-leave");
-        speakStatus("Someone left the channel.");
-        break;
-      }
-    }
-  }
-
-  lastUserNicknames = newSet;
-
-  list.innerHTML = "";
-
-  if (!relevant.length) {
-    const li = document.createElement("li");
-    li.textContent = "[No users yet]";
-    list.appendChild(li);
-    return;
-  }
-
-  for (const u of relevant) {
-    const li = document.createElement("li");
-    li.textContent = u.nickname + (u.username && u.username !== u.nickname ? ` (${u.username})` : "");
-    list.appendChild(li);
-  }
-}
-
-function updateCurrentChannelDisplay() {
-  const el = document.getElementById("current-channel-label");
-  if (el) {
-    el.textContent = currentChannelPath || "/";
-  }
-
-  const list = document.getElementById("channel-list");
-  if (!list) return;
-  const items = list.querySelectorAll(".channel-item");
-  items.forEach(item => {
-    if (item.dataset.channelPath === currentChannelPath) {
-      item.classList.add("current-channel");
-      item.classList.remove("channel-has-activity");
-    } else {
-      item.classList.remove("current-channel");
-    }
-  });
-}
-
-
-/* ==========================================================
-   NEW ACTIVITY MARKERS
-   ========================================================== */
-
-function markChannelActivity(path) {
-  const list = document.getElementById("channel-list");
-  if (!list) return;
-  const items = list.querySelectorAll(".channel-item");
-  items.forEach(item => {
-    if (item.dataset.channelPath === path && path !== currentChannelPath) {
-      item.classList.add("channel-has-activity");
-    }
-  });
-}
-
-function clearChannelActivity(path) {
-  const list = document.getElementById("channel-list");
-  if (!list) return;
-  const items = list.querySelectorAll(".channel-item");
-  items.forEach(item => {
-    if (item.dataset.channelPath === path) {
-      item.classList.remove("channel-has-activity");
-    }
-  });
-}
-
-
-/* ==========================================================
-   CLICK HANDLERS + ADAPTIVE LAYOUT
-   ========================================================== */
-
-document.addEventListener("click", (ev) => {
-  const target = ev.target;
-  if (!(target instanceof HTMLElement)) return;
-
-  if (target.classList.contains("channel-item")) {
-    const path = target.dataset.channelPath || "/";
-    currentChannelPath = path;
-    updateCurrentChannelDisplay();
-    clearChannelActivity(path);
-    setAdaptiveMode("channels");
-
-    sendToServer({
-      type: "tt-join",
-      channel: path
-    });
-  }
-
-  if (target.classList.contains("aac-button")) {
-    setAdaptiveMode("aac");
-  }
-});
-
-const chatInput = document.getElementById("chat-input");
-if (chatInput) {
-  chatInput.addEventListener("focus", () => setAdaptiveMode("chat"));
-}
-
-function setAdaptiveMode(mode) {
-  document.body.classList.remove("mode-chat", "mode-channels", "mode-aac");
-  if (mode === "chat") document.body.classList.add("mode-chat");
-  if (mode === "channels") document.body.classList.add("mode-channels");
-  if (mode === "aac") document.body.classList.add("mode-aac");
-}
-
-
-/* ==========================================================
-   AAC SPEECH HELPERS
-   ========================================================== */
-
-window.speakText = function (text) {
-  if (!text || !window.speechSynthesis) return;
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 1.0;
-  utterance.pitch = 1.0;
-  utterance.onstart = () => enterSoftFocus();
-  utterance.onend = () => {
-    exitSoftFocus();
-    setTimeout(processStatusSpeechQueue, 50);
-  };
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(utterance);
 };
-
-window.startSpeechToText = function () {
-  const input = document.getElementById("chat-input");
-  if (!input) return;
-
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    alert("Speech recognition is not supported in this browser.");
-    return;
-  }
-
-  const recog = new SpeechRecognition();
-  recog.lang = "en-GB";
-  recog.interimResults = false;
-  recog.maxAlternatives = 1;
-
-  recog.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
-    input.value = transcript;
-  };
-
-  recog.onerror = (event) => {
-    console.error("Speech recognition error:", event.error);
-  };
-
-  recog.start();
-};
-
-
-/* ==========================================================
-   AAC QUICK PHRASES
-   ========================================================== */
-
-window.sendQuickPhrase = function (text) {
-  if (!text) return;
-  const input = document.getElementById("chat-input");
-  if (input) {
-    input.value = text;
-  }
-  window.speakText(text);
-};
-
-
-/* ==========================================================
-   CLEANUP ON UNLOAD
-   ========================================================== */
-
-window.addEventListener("beforeunload", () => {
-  uiState.manualDisconnect = true;
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    try {
-      socket.send(JSON.stringify({ type: "disconnect" }));
-      socket.close();
-    } catch (_) {}
-  }
-});
-
-
-/* ==========================================================
-   INITIALISE
-   ========================================================== */
-
-createSocket();
