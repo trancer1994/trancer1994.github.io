@@ -2,223 +2,494 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Connecting Worlds</title>
+<title>Connecting Worlds AAC + TeamTalk Shell</title>
 
-<!-- ==========================================================
-     INLINE CSS — ACCESSIBILITY‑MODERNISED, SAME LAYOUT
-     ========================================================== -->
 <style>
+  :root {
+    --bg: #f5f5f5;
+    --panel-bg: #ffffff;
+    --border: #cccccc;
+    --accent: #003366;
+    --accent-soft: #e8eef7;
+    --button-bg: #0055aa;
+    --button-bg-alt: #666666;
+    --button-text: #ffffff;
+    --danger: #b00020;
+    --success: #008744;
+    --quick-bg: #eeeeee;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
   body {
     margin: 0;
     padding: 0;
-    font-family: system-ui, sans-serif;
-    background: #f5f5f5;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
     color: #222;
     line-height: 1.5;
   }
 
-  header, main, footer {
-    padding: 1rem;
-  }
-
-  header {
-    background: #003366;
-    color: white;
-  }
-
-  h1 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.6rem;
-  }
-
-  /* Status panel */
-  #status-panel {
-    background: #e8eef7;
+  #app {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr) 260px;
+    gap: 0.75rem;
     padding: 0.75rem;
+    height: 100vh;
+  }
+
+  #left-panel,
+  #middle-panel,
+  #right-panel {
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    margin-bottom: 1rem;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
-  #status-panel p {
-    margin: 0.25rem 0;
+  /* Left panel */
+  #left-panel button,
+  #left-panel .aac-button {
+    margin-bottom: 0.4rem;
   }
 
-  /* Buttons */
+  .aac-button,
   button {
-    font-size: 1rem;
-    padding: 0.6rem 1rem;
-    margin: 0.25rem;
+    font-size: 0.95rem;
+    padding: 0.5rem 0.75rem;
     border-radius: 6px;
     border: none;
     cursor: pointer;
   }
 
-  #connect-btn.connecting { background: #ffaa00; color: #000; }
-  #connect-btn.connected { background: #00aa44; color: #fff; }
-  #connect-btn.disconnected { background: #666; color: #fff; }
+  .aac-button {
+    background: var(--button-bg);
+    color: var(--button-text);
+  }
+
+  .aac-button.disconnected {
+    background: var(--button-bg-alt);
+  }
 
   #disconnect-btn {
-    background: #cc0000;
-    color: white;
-    display: none;
+    background: var(--danger);
   }
 
-  /* Layout grid */
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 2fr;
-    gap: 1rem;
-  }
-
-  section {
-    background: white;
-    padding: 0.75rem;
-    border-radius: 6px;
-    min-height: 200px;
-  }
-
-  section h2 {
-    margin-top: 0;
-    font-size: 1.2rem;
-  }
-
-  ul {
-    list-style: none;
-    padding-left: 0;
-    margin: 0;
-  }
-
-  /* Chat log */
-  #chat-log {
-    height: 300px;
-    overflow-y: auto;
-    border: 1px solid #ccc;
+  #status-panel {
+    margin: 0.5rem 0;
     padding: 0.5rem;
+    border-radius: 6px;
+    background: var(--accent-soft);
+    font-size: 0.9rem;
+  }
+
+  #status-panel div {
+    margin-bottom: 0.25rem;
+  }
+
+  #sound-toggle,
+  #presence-toggle {
+    background: #dddddd;
+    color: #000;
+  }
+
+  #sound-toggle:focus,
+  #presence-toggle:focus,
+  .aac-button:focus,
+  button:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Quick phrases */
+  #quick-phrases {
+    margin-top: 0.5rem;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+  }
+
+  .quick-phrase {
+    background: var(--quick-bg);
+    border-radius: 4px;
+    padding: 0.4rem;
+    text-align: center;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .quick-phrase:focus,
+  .quick-phrase:hover {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  /* Middle panel */
+  #chat {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.5rem;
+    overflow-y: auto;
+    font-size: 0.95rem;
     background: #fafafa;
   }
 
-  .chat-line {
-    margin-bottom: 0.4rem;
-  }
-
-  /* Chat input */
-  #chat-input {
-    width: 100%;
-    padding: 0.6rem;
-    font-size: 1rem;
+  #input-area {
     margin-top: 0.5rem;
-    border-radius: 6px;
-    border: 1px solid #aaa;
+    display: flex;
+    gap: 0.4rem;
   }
 
-  /* Footer toggles */
-  footer {
-    background: #ddd;
-    margin-top: 1rem;
-    padding: 1rem;
-    border-top: 1px solid #ccc;
+  #chat-input {
+    flex: 1;
+    padding: 0.5rem;
+    font-size: 0.95rem;
+    border-radius: 4px;
+    border: 1px solid #aaaaaa;
   }
 
-  /* Soft focus mode */
-  .soft-focus {
-    filter: blur(3px);
-    transition: filter 0.2s ease;
+  #send-btn {
+    background: var(--accent);
+    color: #ffffff;
   }
 
-  /* Status flash */
-  .status-changed {
-    animation: flash 0.25s ease;
+  #conversation-memory {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    max-height: 120px;
+    overflow-y: auto;
+    border-top: 1px solid var(--border);
+    padding-top: 0.4rem;
   }
 
-  @keyframes flash {
-    from { background: #fff3cd; }
-    to { background: #e8eef7; }
+  /* Right panel */
+  #current-channel {
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+
+  #right-panel section {
+    margin-bottom: 0.75rem;
+  }
+
+  #right-panel h2 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1rem;
+  }
+
+  #channel-list,
+  #user-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    max-height: 40vh;
+    overflow-y: auto;
+    font-size: 0.9rem;
+  }
+
+  #channel-list li,
+  #user-list li {
+    padding: 0.3rem 0.4rem;
+    cursor: pointer;
+  }
+
+  #channel-list li:hover,
+  #channel-list li:focus {
+    background: var(--accent-soft);
+  }
+
+  /* Status colours */
+  .status-connected {
+    color: var(--success);
+    font-weight: 600;
+  }
+
+  .status-disconnected {
+    color: var(--danger);
+    font-weight: 600;
+  }
+
+  /* Small screens */
+  @media (max-width: 900px) {
+    #app {
+      grid-template-columns: 1fr;
+      grid-auto-rows: minmax(0, auto);
+      height: auto;
+    }
   }
 </style>
 </head>
-
 <body>
 
-<header>
-  <h1>Connecting Worlds</h1>
+<div id="app">
 
-  <div id="status-panel" role="status" aria-live="polite">
-    <p id="bridge-status">Bridge: 🔴 Disconnected</p>
-    <p id="tt-status">TeamTalk: 🔴 Disconnected</p>
-    <p>Current channel: <span id="current-channel">/</span></p>
+  <!-- LEFT PANEL -->
+  <div id="left-panel" aria-label="AAC controls and connection" role="region">
+
+    <button id="connect-btn"
+            class="aac-button disconnected"
+            onclick="connectEverything()"
+            aria-label="Connect to bridge and TeamTalk">
+      Connect
+    </button>
+
+    <button id="disconnect-btn"
+            class="aac-button"
+            onclick="disconnectEverything()"
+            style="display:none;"
+            aria-label="Disconnect from bridge and TeamTalk">
+      Disconnect
+    </button>
+
+    <div id="status-panel" role="status" aria-live="polite">
+      <div id="bridge-status">Bridge: 🔴 Disconnected</div>
+      <div id="tt-status">TeamTalk: 🔴 Disconnected</div>
+    </div>
+
+    <button id="sound-toggle"
+            onclick="toggleSoundCues()"
+            aria-pressed="true">
+      Sound cues: ON
+    </button>
+
+    <button id="presence-toggle"
+            onclick="togglePresenceCues()"
+            aria-pressed="true">
+      Presence tones: ON
+    </button>
+
+    <button class="aac-button"
+            onclick="speakText(document.getElementById('chat-input').value)"
+            aria-label="Speak the text in the message box">
+      Speak Text
+    </button>
+
+    <button class="aac-button"
+            onclick="speechSynthesis.cancel()"
+            aria-label="Stop speech">
+      Stop Speech
+    </button>
+
+    <button class="aac-button"
+            onclick="startSpeechToText()"
+            aria-label="Convert speech to text into the message box">
+      Speech → Text
+    </button>
+
+    <!-- QUICK PHRASES -->
+    <div id="quick-phrases" aria-label="Quick phrases" role="list">
+      <div class="quick-phrase" role="button" tabindex="0"
+           onclick="sendQuickPhrase('Yes')"
+           onkeydown="if(event.key==='Enter' || event.key===' '){ sendQuickPhrase('Yes'); }">
+        Yes
+      </div>
+      <div class="quick-phrase" role="button" tabindex="0"
+           onclick="sendQuickPhrase('No')"
+           onkeydown="if(event.key==='Enter' || event.key===' '){ sendQuickPhrase('No'); }">
+        No
+      </div>
+      <div class="quick-phrase" role="button" tabindex="0"
+           onclick="sendQuickPhrase('Wait a moment')"
+           onkeydown="if(event.key==='Enter' || event.key===' '){ sendQuickPhrase('Wait a moment'); }">
+        Wait a moment
+      </div>
+      <div class="quick-phrase" role="button" tabindex="0"
+           onclick="sendQuickPhrase('I need help')"
+           onkeydown="if(event.key==='Enter' || event.key===' '){ sendQuickPhrase('I need help'); }">
+        I need help
+      </div>
+    </div>
+
   </div>
 
-  <button id="connect-btn"
-          class="disconnected"
-          onclick="connectEverything()"
-          aria-label="Connect to bridge and TeamTalk">
-    Connect
-  </button>
+  <!-- MIDDLE PANEL -->
+  <div id="middle-panel" aria-label="Chat and message composition" role="region">
+    <div id="chat"
+         role="log"
+         aria-live="polite"
+         aria-relevant="additions text">
+      <p>[Connecting Worlds AAC + TeamTalk Shell]</p>
+      <p>Tap “Connect” to connect to the bridge and TeamTalk.</p>
+    </div>
 
-  <button id="disconnect-btn"
-          onclick="disconnectEverything()"
-          aria-label="Disconnect from bridge and TeamTalk">
-    Disconnect
-  </button>
-</header>
-
-<main>
-  <div class="grid">
-
-    <!-- Channels -->
-    <section aria-labelledby="channels-heading">
-      <h2 id="channels-heading">Channels</h2>
-      <ul id="channel-list"></ul>
-    </section>
-
-    <!-- Users -->
-    <section aria-labelledby="users-heading">
-      <h2 id="users-heading">Users</h2>
-      <ul id="user-list"></ul>
-    </section>
-
-    <!-- Chat -->
-    <section aria-labelledby="chat-heading">
-      <h2 id="chat-heading">Chat</h2>
-
-      <div id="chat-log"
-           role="log"
-           aria-live="polite"
-           aria-relevant="additions text">
-      </div>
-
+    <div id="input-area">
       <input id="chat-input"
              type="text"
-             placeholder="Type a message…"
+             placeholder="Type your message…"
              aria-label="Chat message"
              onkeydown="if(event.key==='Enter'){ sendTeamTalkChat(); }">
+      <button id="send-btn"
+              onclick="sendTeamTalkChat()"
+              aria-label="Send message to current channel">
+        Send
+      </button>
+    </div>
+
+    <div id="conversation-memory"
+         aria-label="Conversation memory"
+         role="region">
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div id="right-panel" aria-label="Channels and users" role="region">
+
+    <div id="current-channel">
+      Current channel: <span id="current-channel-label">/</span>
+    </div>
+
+    <section aria-labelledby="channels-heading">
+      <h2 id="channels-heading">Channels</h2>
+      <ul id="channel-list">
+        <li>[No channels yet]</li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="users-heading">
+      <h2 id="users-heading">Users</h2>
+      <ul id="user-list">
+        <li>[No users yet]</li>
+      </ul>
     </section>
 
   </div>
-</main>
+</div>
 
-<footer>
-  <button id="sound-toggle"
-          onclick="toggleSoundCues()"
-          aria-label="Toggle sound cues">
-    Sound cues: ON
-  </button>
+<!-- SOUND CUES -->
+<audio id="sound-bridge-connected"></audio>
+<audio id="sound-bridge-disconnected"></audio>
+<audio id="sound-tt-connected"></audio>
+<audio id="sound-tt-disconnected"></audio>
+<audio id="sound-presence-join"></audio>
+<audio id="sound-presence-leave"></audio>
 
-  <button id="presence-toggle"
-          onclick="togglePresenceCues()"
-          aria-label="Toggle presence tones">
-    Presence tones: ON
-  </button>
-</footer>
-
-<!-- Audio cues -->
-<audio id="sound-bridge-connected" src="bridge-connected.mp3"></audio>
-<audio id="sound-bridge-disconnected" src="bridge-disconnected.mp3"></audio>
-<audio id="sound-tt-connected" src="tt-connected.mp3"></audio>
-<audio id="sound-tt-disconnected" src="tt-disconnected.mp3"></audio>
-
-<!-- Unified bridge logic -->
 <script src="bridge.js"></script>
+
+<script>
+/* ---------------------------------------------------------
+   1. CENTRAL REFRESH FUNCTION
+   --------------------------------------------------------- */
+
+async function refreshUI() {
+  try {
+    const channels = await bridge.getChannels();
+    const users = await bridge.getUsers();
+    const current = await bridge.getCurrentChannel();
+
+    updateChannelList(channels);
+    updateUserList(users);
+    updateCurrentChannel(current);
+
+  } catch (err) {
+    console.error("Refresh failed:", err);
+  }
+}
+
+/* ---------------------------------------------------------
+   2. DOM UPDATE HELPERS
+   --------------------------------------------------------- */
+
+function updateChannelList(channels) {
+  const ul = document.getElementById("channel-list");
+  ul.innerHTML = "";
+
+  if (!channels || channels.length === 0) {
+    ul.innerHTML = "<li>[No channels yet]</li>";
+    return;
+  }
+
+  channels.forEach(ch => {
+    const li = document.createElement("li");
+    li.textContent = ch.name;
+    li.tabIndex = 0;
+    li.onclick = () => bridge.joinChannel(ch.id);
+    li.onkeydown = (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        bridge.joinChannel(ch.id);
+      }
+    };
+    ul.appendChild(li);
+  });
+}
+
+function updateUserList(users) {
+  const ul = document.getElementById("user-list");
+  ul.innerHTML = "";
+
+  if (!users || users.length === 0) {
+    ul.innerHTML = "<li>[No users yet]</li>";
+    return;
+  }
+
+  users.forEach(u => {
+    const li = document.createElement("li");
+    li.textContent = u.nickname;
+    ul.appendChild(li);
+  });
+}
+
+function updateCurrentChannel(ch) {
+  const label = document.getElementById("current-channel-label");
+  label.textContent = ch ? ch.name : "/";
+}
+
+/* ---------------------------------------------------------
+   3. POLLING LOOP (fixes stale UI + ghost sessions)
+   --------------------------------------------------------- */
+
+let refreshInterval = null;
+
+function startPolling() {
+  refreshUI(); // initial sync
+  refreshInterval = setInterval(refreshUI, 4000);
+}
+
+function stopPolling() {
+  if (refreshInterval) clearInterval(refreshInterval);
+}
+
+/* ---------------------------------------------------------
+   4. PAGE VISIBILITY + BFCache RESTORE FIXES
+   --------------------------------------------------------- */
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    refreshUI();
+  }
+});
+
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) {
+    refreshUI();
+  }
+});
+
+/* ---------------------------------------------------------
+   5. BRIDGE EVENT HOOKS (instant updates)
+   --------------------------------------------------------- */
+
+bridge.on("connected", refreshUI);
+bridge.on("channel-added", refreshUI);
+bridge.on("channel-removed", refreshUI);
+bridge.on("user-connected", refreshUI);
+bridge.on("user-disconnected", refreshUI);
+bridge.on("channel-changed", refreshUI);
+
+/* ---------------------------------------------------------
+   6. START EVERYTHING
+   --------------------------------------------------------- */
+
+window.addEventListener("load", startPolling);
+window.addEventListener("beforeunload", stopPolling);
+</script>
 
 </body>
 </html>
