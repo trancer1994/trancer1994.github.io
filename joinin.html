@@ -203,6 +203,17 @@
     background: var(--accent-soft);
   }
 
+  /* Visual cue flashes */
+  .user-flash-join {
+    background: #d8f5d0;
+    transition: background 1s ease;
+  }
+
+  .user-flash-leave {
+    background: #f8d0d0;
+    transition: background 1s ease;
+  }
+
   @media (max-width: 900px) {
     #app {
       grid-template-columns: 1fr;
@@ -353,10 +364,23 @@
 <audio id="sound-tt-disconnected"></audio>
 <audio id="sound-presence-join"></audio>
 <audio id="sound-presence-leave"></audio>
+<audio id="sound-channel-change"></audio>
 
 <script src="bridge.js"></script>
-
 <script>
+/* ---------------------------------------------------------
+   Presence log helper (used by bridge.js)
+   --------------------------------------------------------- */
+function logPresence(text) {
+  const chat = document.getElementById("chat");
+  const p = document.createElement("p");
+  p.style.color = "#666";
+  p.style.fontSize = "0.85rem";
+  p.textContent = text;
+  chat.appendChild(p);
+  chat.scrollTop = chat.scrollHeight;
+}
+
 /* ---------------------------------------------------------
    1. CENTRAL REFRESH FUNCTION
    --------------------------------------------------------- */
@@ -401,6 +425,13 @@ function updateChannelList(channels) {
     };
     ul.appendChild(li);
   });
+
+  /* Visual cue for channel change */
+  if (window._flashChannelChange) {
+    ul.style.background = "#e8eef7";
+    setTimeout(() => { ul.style.background = ""; }, 600);
+    window._flashChannelChange = false;
+  }
 }
 
 function updateUserList(users) {
@@ -415,8 +446,29 @@ function updateUserList(users) {
   users.forEach(u => {
     const li = document.createElement("li");
     li.textContent = u.nickname;
+    li.dataset.id = u.id;
     ul.appendChild(li);
   });
+
+  /* Visual cue: user joined */
+  if (window._flashUserJoin) {
+    const li = document.querySelector(`#user-list li[data-id="${window._flashUserJoin}"]`);
+    if (li) {
+      li.classList.add("user-flash-join");
+      setTimeout(() => li.classList.remove("user-flash-join"), 1000);
+    }
+    window._flashUserJoin = null;
+  }
+
+  /* Visual cue: user left */
+  if (window._flashUserLeave) {
+    const li = document.querySelector(`#user-list li[data-id="${window._flashUserLeave}"]`);
+    if (li) {
+      li.classList.add("user-flash-leave");
+      setTimeout(() => li.classList.remove("user-flash-leave"), 1000);
+    }
+    window._flashUserLeave = null;
+  }
 }
 
 function updateCurrentChannel(ch) {
@@ -425,13 +477,13 @@ function updateCurrentChannel(ch) {
 }
 
 /* ---------------------------------------------------------
-   3. POLLING LOOP
+   3. POLLING LOOP (fixes stale UI + ghost sessions)
    --------------------------------------------------------- */
 
 let refreshInterval = null;
 
 function startPolling() {
-  refreshUI();
+  refreshUI(); // initial sync
   refreshInterval = setInterval(refreshUI, 4000);
 }
 
@@ -440,7 +492,7 @@ function stopPolling() {
 }
 
 /* ---------------------------------------------------------
-   4. PAGE VISIBILITY FIXES
+   4. PAGE VISIBILITY + BFCache RESTORE FIXES
    --------------------------------------------------------- */
 
 document.addEventListener("visibilitychange", () => {
@@ -456,7 +508,7 @@ window.addEventListener("pageshow", (event) => {
 });
 
 /* ---------------------------------------------------------
-   5. BRIDGE EVENT HOOKS
+   5. BRIDGE EVENT HOOKS (instant updates)
    --------------------------------------------------------- */
 
 bridge.on("connected", refreshUI);
