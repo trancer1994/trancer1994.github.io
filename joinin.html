@@ -366,7 +366,19 @@
 <audio id="sound-presence-leave"></audio>
 <audio id="sound-channel-change"></audio>
 
+<!-- SPEECH HELPER -->
+<script>
+function speakText(text) {
+  if (!text) return;
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 1;
+  utter.pitch = 1;
+  speechSynthesis.speak(utter);
+}
+</script>
+
 <script src="bridge.js"></script>
+
 <script>
 /* ---------------------------------------------------------
    Presence log helper (used by bridge.js)
