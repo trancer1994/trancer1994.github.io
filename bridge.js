@@ -1,10 +1,10 @@
 /* ==========================================================
-   BRIDGE.JS — MODERN ARCHITECTURE WITH SAFETY + LOGGING
+   BRIDGE.JS — UNIFIED OPTION 3 (FULL ARCHITECTURE)
    ========================================================== */
 
-/* ==========================================================
-   MODULE 1 — CORE STATE MACHINE + LIFECYCLE CONTROLLER
-   ========================================================== */
+/* ----------------------------------------------------------
+   CORE STATE + HELPERS
+   ---------------------------------------------------------- */
 
 const AppState = {
   // Connection state
@@ -40,7 +40,7 @@ const AppState = {
 };
 
 /* ----------------------------------------------------------
-   LOGGING (ENHANCED, CONSOLE ONLY)
+   LOGGING
    ---------------------------------------------------------- */
 
 const Log = {
@@ -51,6 +51,10 @@ const Log = {
   error: (...args) => console.error("[ERROR]", ...args),
   raw: (...args) => console.log(...args)
 };
+
+/* ----------------------------------------------------------
+   SOFT FOCUS + STATUS SPEECH
+   ---------------------------------------------------------- */
 
 function enterSoftFocus() {
   AppState.softFocusCount++;
@@ -94,6 +98,10 @@ function speakStatus(text) {
   processStatusSpeechQueue();
 }
 
+/* ----------------------------------------------------------
+   STATE HELPERS
+   ---------------------------------------------------------- */
+
 function resetReconnectAttempts() {
   AppState.reconnectAttempts = 0;
 }
@@ -126,9 +134,9 @@ function setManualDisconnect(flag) {
 /* Stub for optional activity clearing */
 function clearChannelActivity() {}
 
-/* ==========================================================
-   MODULE 2 — UI CONTROLLER
-   ========================================================== */
+/* ----------------------------------------------------------
+   UI CONTROLLER
+   ---------------------------------------------------------- */
 
 const UIController = {
   setConnectButtonState(state, label) {
@@ -310,10 +318,9 @@ const UIController = {
 
 window.toggleSoundCues = () => UIController.toggleSoundCues();
 window.togglePresenceCues = () => UIController.togglePresenceCues();
-
-/* ==========================================================
-   MODULE 3 — WEBSOCKET MANAGER (BRIDGE)
-   ========================================================== */
+/* ----------------------------------------------------------
+   WEBSOCKET MANAGER (BRIDGE)
+   ---------------------------------------------------------- */
 
 const WebSocketManager = {
   connect() {
@@ -335,7 +342,7 @@ const WebSocketManager = {
     ws.onopen = () => {
       if (isStaleSocket(socketId)) return;
 
-      AppState.reconnectAttempts = 0;
+      resetReconnectAttempts();
       AppState.bridgeConnected = true;
 
       UIController.updateBridgeStatus(true);
@@ -453,9 +460,9 @@ const WebSocketManager = {
   }
 };
 
-/* ==========================================================
-   MODULE 4 — TEAMTALK MANAGER
-   ========================================================== */
+/* ----------------------------------------------------------
+   TEAMTALK MANAGER
+   ---------------------------------------------------------- */
 
 const TeamTalkManager = {
   startHandshake() {
@@ -463,11 +470,11 @@ const TeamTalkManager = {
     speakStatus("Connecting to TeamTalk");
 
     TeamTalkManager.requestHandshake({
-      host: "tt.seedy.cc",
+      host: tt.seedy.cc,
       port: 10333,
-      username: "admin",
-      password: "admin",
-      channel: "/"
+      username: admin,
+      password: admin,
+      channel: /
     });
   },
 
@@ -583,10 +590,9 @@ window.sendTeamTalkChat = function () {
 
   input.value = "";
 };
-
-/* ==========================================================
-   MODULE 5 — MESSAGE ROUTER
-   ========================================================== */
+/* ----------------------------------------------------------
+   MESSAGE ROUTER
+   ---------------------------------------------------------- */
 
 const MessageRouter = {
   route(msg) {
@@ -640,9 +646,9 @@ const MessageRouter = {
   }
 };
 
-/* ==========================================================
-   MODULE 6 — FORCED TEARDOWN ENGINE
-   ========================================================== */
+/* ----------------------------------------------------------
+   FORCED TEARDOWN ENGINE
+   ---------------------------------------------------------- */
 
 const ForcedTeardownEngine = {
   run() {
@@ -652,7 +658,6 @@ const ForcedTeardownEngine = {
     AppState.reconnectAttempts = 0;
 
     WebSocketManager.forceClose();
-
     incrementSocketId();
 
     TeamTalkManager.forceDisconnect();
@@ -661,9 +666,9 @@ const ForcedTeardownEngine = {
   }
 };
 
-/* ==========================================================
-   MODULE 7 — PUBLIC API + BUTTON BINDINGS
-   ========================================================== */
+/* ----------------------------------------------------------
+   PUBLIC API + BUTTON BINDINGS
+   ---------------------------------------------------------- */
 
 window.connectEverything = function () {
   Log.ui("Connect pressed…");
@@ -678,7 +683,7 @@ window.connectEverything = function () {
     return;
   }
 
-  if (AppState.bridgeConnected && AppState.ttConnected) {
+  if (isBridgeConnected() && isTTConnected()) {
     speakStatus("Already connected");
     return;
   }
