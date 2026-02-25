@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Connecting Worlds AAC + TeamTalk Shell</title>
+<title>Connecting Worlds – Join in!</title>
 
 <style>
   :root {
@@ -32,12 +32,40 @@
     line-height: 1.5;
   }
 
+  /* Top navigation bar */
+  #top-nav {
+    background: #003366;
+    color: white;
+    padding: 0.6rem 1rem;
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    border-bottom: 3px solid #002244;
+    font-size: 1rem;
+  }
+
+  #top-nav a {
+    color: white;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  #top-nav a:hover,
+  #top-nav a:focus {
+    text-decoration: underline;
+    outline: none;
+  }
+
+  #top-nav a[aria-current="page"] {
+    text-decoration: underline;
+  }
+
   #app {
     display: grid;
     grid-template-columns: 260px minmax(0, 1fr) 260px;
     gap: 0.75rem;
     padding: 0.75rem;
-    height: 100vh;
+    height: calc(100vh - 60px);
   }
 
   #left-panel,
@@ -52,12 +80,7 @@
     min-height: 0;
   }
 
-  /* Left panel */
-  #left-panel button,
-  #left-panel .aac-button {
-    margin-bottom: 0.4rem;
-  }
-
+  /* Buttons */
   .aac-button,
   button {
     font-size: 0.95rem;
@@ -65,6 +88,7 @@
     border-radius: 6px;
     border: none;
     cursor: pointer;
+    margin-bottom: 0.4rem;
   }
 
   .aac-button {
@@ -88,22 +112,10 @@
     font-size: 0.9rem;
   }
 
-  #status-panel div {
-    margin-bottom: 0.25rem;
-  }
-
   #sound-toggle,
   #presence-toggle {
     background: #dddddd;
     color: #000;
-  }
-
-  #sound-toggle:focus,
-  #presence-toggle:focus,
-  .aac-button:focus,
-  button:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
   }
 
   /* Quick phrases */
@@ -121,12 +133,6 @@
     text-align: center;
     font-size: 0.9rem;
     cursor: pointer;
-  }
-
-  .quick-phrase:focus,
-  .quick-phrase:hover {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
   }
 
   /* Middle panel */
@@ -174,15 +180,6 @@
     font-weight: 600;
   }
 
-  #right-panel section {
-    margin-bottom: 0.75rem;
-  }
-
-  #right-panel h2 {
-    margin: 0 0 0.25rem 0;
-    font-size: 1rem;
-  }
-
   #channel-list,
   #user-list {
     list-style: none;
@@ -206,28 +203,22 @@
     background: var(--accent-soft);
   }
 
-  /* Status colours */
-  .status-connected {
-    color: var(--success);
-    font-weight: 600;
-  }
-
-  .status-disconnected {
-    color: var(--danger);
-    font-weight: 600;
-  }
-
-  /* Small screens */
   @media (max-width: 900px) {
     #app {
       grid-template-columns: 1fr;
-      grid-auto-rows: minmax(0, auto);
       height: auto;
     }
   }
 </style>
 </head>
 <body>
+
+<!-- TOP NAVIGATION -->
+<nav id="top-nav" aria-label="Site navigation">
+  <a href="index.html">Home</a>
+  <a href="about.html">About</a>
+  <a href="joinin.html" aria-current="page">Join In</a>
+</nav>
 
 <div id="app">
 
@@ -267,43 +258,36 @@
     </button>
 
     <button class="aac-button"
-            onclick="speakText(document.getElementById('chat-input').value)"
-            aria-label="Speak the text in the message box">
+            onclick="speakText(document.getElementById('chat-input').value)">
       Speak Text
     </button>
 
     <button class="aac-button"
-            onclick="speechSynthesis.cancel()"
-            aria-label="Stop speech">
+            onclick="speechSynthesis.cancel()">
       Stop Speech
     </button>
 
     <button class="aac-button"
-            onclick="startSpeechToText()"
-            aria-label="Convert speech to text into the message box">
+            onclick="startSpeechToText()">
       Speech → Text
     </button>
 
     <!-- QUICK PHRASES -->
     <div id="quick-phrases" aria-label="Quick phrases" role="list">
       <div class="quick-phrase" role="button" tabindex="0"
-           onclick="sendQuickPhrase('Yes')"
-           onkeydown="if(event.key==='Enter' || event.key===' '){ sendQuickPhrase('Yes'); }">
+           onclick="sendQuickPhrase('Yes')">
         Yes
       </div>
       <div class="quick-phrase" role="button" tabindex="0"
-           onclick="sendQuickPhrase('No')"
-           onkeydown="if(event.key==='Enter' || event.key===' '){ sendQuickPhrase('No'); }">
+           onclick="sendQuickPhrase('No')">
         No
       </div>
       <div class="quick-phrase" role="button" tabindex="0"
-           onclick="sendQuickPhrase('Wait a moment')"
-           onkeydown="if(event.key==='Enter' || event.key===' '){ sendQuickPhrase('Wait a moment'); }">
+           onclick="sendQuickPhrase('Wait a moment')">
         Wait a moment
       </div>
       <div class="quick-phrase" role="button" tabindex="0"
-           onclick="sendQuickPhrase('I need help')"
-           onkeydown="if(event.key==='Enter' || event.key===' '){ sendQuickPhrase('I need help'); }">
+           onclick="sendQuickPhrase('I need help')">
         I need help
       </div>
     </div>
@@ -327,8 +311,7 @@
              aria-label="Chat message"
              onkeydown="if(event.key==='Enter'){ sendTeamTalkChat(); }">
       <button id="send-btn"
-              onclick="sendTeamTalkChat()"
-              aria-label="Send message to current channel">
+              onclick="sendTeamTalkChat()">
         Send
       </button>
     </div>
@@ -442,13 +425,13 @@ function updateCurrentChannel(ch) {
 }
 
 /* ---------------------------------------------------------
-   3. POLLING LOOP (fixes stale UI + ghost sessions)
+   3. POLLING LOOP
    --------------------------------------------------------- */
 
 let refreshInterval = null;
 
 function startPolling() {
-  refreshUI(); // initial sync
+  refreshUI();
   refreshInterval = setInterval(refreshUI, 4000);
 }
 
@@ -457,7 +440,7 @@ function stopPolling() {
 }
 
 /* ---------------------------------------------------------
-   4. PAGE VISIBILITY + BFCache RESTORE FIXES
+   4. PAGE VISIBILITY FIXES
    --------------------------------------------------------- */
 
 document.addEventListener("visibilitychange", () => {
@@ -473,7 +456,7 @@ window.addEventListener("pageshow", (event) => {
 });
 
 /* ---------------------------------------------------------
-   5. BRIDGE EVENT HOOKS (instant updates)
+   5. BRIDGE EVENT HOOKS
    --------------------------------------------------------- */
 
 bridge.on("connected", refreshUI);
