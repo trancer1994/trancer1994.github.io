@@ -363,5 +363,116 @@
 
 <script src="bridge.js"></script>
 
+<script>
+/* ---------------------------------------------------------
+   1. CENTRAL REFRESH FUNCTION
+   --------------------------------------------------------- */
+
+async function refreshUI() {
+  try {
+    const channels = await bridge.getChannels();
+    const users = await bridge.getUsers();
+    const current = await bridge.getCurrentChannel();
+
+    updateChannelList(channels);
+    updateUserList(users);
+    updateCurrentChannel(current);
+
+  } catch (err) {
+    console.error("Refresh failed:", err);
+  }
+}
+
+/* ---------------------------------------------------------
+   2. DOM UPDATE HELPERS
+   --------------------------------------------------------- */
+
+function updateChannelList(channels) {
+  const ul = document.getElementById("channel-list");
+  ul.innerHTML = "";
+
+  if (!channels || channels.length === 0) {
+    ul.innerHTML = "<li>[No channels yet]</li>";
+    return;
+  }
+
+  channels.forEach(ch => {
+    const li = document.createElement("li");
+    li.textContent = ch.name;
+    li.onclick = () => bridge.joinChannel(ch.id);
+    ul.appendChild(li);
+  });
+}
+
+function updateUserList(users) {
+  const ul = document.getElementById("user-list");
+  ul.innerHTML = "";
+
+  if (!users || users.length === 0) {
+    ul.innerHTML = "<li>[No users yet]</li>";
+    return;
+  }
+
+  users.forEach(u => {
+    const li = document.createElement("li");
+    li.textContent = u.nickname;
+    ul.appendChild(li);
+  });
+}
+
+function updateCurrentChannel(ch) {
+  const label = document.getElementById("current-channel-label");
+  label.textContent = ch ? ch.name : "/";
+}
+
+/* ---------------------------------------------------------
+   3. POLLING LOOP (fixes stale UI + ghost sessions)
+   --------------------------------------------------------- */
+
+let refreshInterval = null;
+
+function startPolling() {
+  refreshUI(); // initial sync
+  refreshInterval = setInterval(refreshUI, 4000);
+}
+
+function stopPolling() {
+  if (refreshInterval) clearInterval(refreshInterval);
+}
+
+/* ---------------------------------------------------------
+   4. PAGE VISIBILITY + BFCache RESTORE FIXES
+   --------------------------------------------------------- */
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    refreshUI();
+  }
+});
+
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) {
+    refreshUI();
+  }
+});
+
+/* ---------------------------------------------------------
+   5. BRIDGE EVENT HOOKS (instant updates)
+   --------------------------------------------------------- */
+
+bridge.on("connected", refreshUI);
+bridge.on("channel-added", refreshUI);
+bridge.on("channel-removed", refreshUI);
+bridge.on("user-connected", refreshUI);
+bridge.on("user-disconnected", refreshUI);
+bridge.on("channel-changed", refreshUI);
+
+/* ---------------------------------------------------------
+   6. START EVERYTHING
+   --------------------------------------------------------- */
+
+window.addEventListener("load", startPolling);
+window.addEventListener("beforeunload", stopPolling);
+</script>
 </body>
 </html>
