@@ -39,8 +39,7 @@ class BridgeAdapter {
   connect() {
     return new Promise((resolve, reject) => {
       try {
-this.ws = new WebSocket("wss://connectingworlds-bridge.onrender.com");
-
+        this.ws = new WebSocket("wss://connectingworlds-bridge.onrender.com");
 
         this.ws.onopen = () => {
           this.connected = true;
@@ -62,3 +61,46 @@ this.ws = new WebSocket("wss://connectingworlds-bridge.onrender.com");
           try {
             const data = JSON.parse(msg.data);
             this.handleMessage(data);
+          } catch (e) {
+            console.error("Failed to parse message:", e);
+          }
+        };
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  /* -------------------------------------------------------
+     Message handler
+     ------------------------------------------------------- */
+  handleMessage(data) {
+    if (!data || !data.type) return;
+
+    switch (data.type) {
+      case "presence-join":
+        if (this.joinTone) this.joinTone.play();
+        this.emit("presence-join", data);
+        break;
+
+      case "presence-leave":
+        if (this.leaveTone) this.leaveTone.play();
+        this.emit("presence-leave", data);
+        break;
+
+      case "channel-change":
+        if (this.channelTone) this.channelTone.play();
+        this.emit("channel-change", data);
+        break;
+
+      default:
+        this.emit("message", data);
+        break;
+    }
+  }
+}
+
+/* ---------------------------------------------------------
+   Export instance
+   --------------------------------------------------------- */
+const bridge = new BridgeAdapter();
