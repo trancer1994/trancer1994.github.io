@@ -1,10 +1,7 @@
 /* ---------------------------------------------------------
-   Connecting Worlds – Bridge Adapter
-   AAC‑friendly version with:
-   • Distinct tones (join / leave / channel change)
-   • Visual cues (soft flashes)
-   • Presence log in chat
-   • No spoken system chatter
+   Connecting Worlds – AAC‑Friendly Bridge Adapter
+   Restores the old RPC-style API expected by joinin.html,
+   while using the new WebSocket event-driven backend.
    --------------------------------------------------------- */
 
 class BridgeAdapter {
@@ -13,7 +10,15 @@ class BridgeAdapter {
     this.handlers = {};
     this.connected = false;
 
-    /* Presence tones */
+    // Cached TeamTalk state (populated from server messages)
+    this.channels = [];          // array of { id, name, path }
+    this.users = [];             // array of { id, nickname, channelId }
+    this.currentChannel = {      // { name, path }
+      name: "/",
+      path: "/"
+    };
+
+    // Presence tones
     this.joinTone = document.getElementById("sound-presence-join");
     this.leaveTone = document.getElementById("sound-presence-leave");
     this.channelTone = document.getElementById("sound-channel-change");
@@ -34,7 +39,7 @@ class BridgeAdapter {
   }
 
   /* -------------------------------------------------------
-     Connection management
+     WebSocket connection
      ------------------------------------------------------- */
   connect() {
     return new Promise((resolve, reject) => {
@@ -44,6 +49,10 @@ class BridgeAdapter {
         this.ws.onopen = () => {
           this.connected = true;
           this.emit("connected");
+
+          // Perform handshake immediately
+          this.ws.send(JSON.stringify({ type: "handshake" }));
+
           resolve();
         };
 
@@ -58,12 +67,14 @@ class BridgeAdapter {
         };
 
         this.ws.onmessage = (msg) => {
+          let data;
           try {
-            const data = JSON.parse(msg.data);
-            this.handleMessage(data);
+            data = JSON.parse(msg.data);
           } catch (e) {
             console.error("Failed to parse message:", e);
+            return;
           }
+          this.handleMessage(data);
         };
       } catch (err) {
         reject(err);
@@ -72,12 +83,14 @@ class BridgeAdapter {
   }
 
   /* -------------------------------------------------------
-     Message handler
+     Message handler (server → UI)
      ------------------------------------------------------- */
   handleMessage(data) {
     if (!data || !data.type) return;
 
     switch (data.type) {
+
+      /* Presence tones */
       case "presence-join":
         if (this.joinTone) this.joinTone.play();
         this.emit("presence-join", data);
@@ -93,9 +106,77 @@ class BridgeAdapter {
         this.emit("channel-change", data);
         break;
 
+      /* TeamTalk state updates */
+      case "tt-channel-list":
+        this.channels = data.channels || [];
+        this.emit("channel-added");
+        break;
+
+      case "tt-user-list":
+        this.users = data.users || [];
+        this.emit("user-connected");
+        break;
+
+      case "tt-current-channel":
+        this.currentChannel = {
+          name: data.channel || "/",
+          path: data.channel || "/"
+        };
+        this.emit("channel-changed");
+        break;
+
       default:
         this.emit("message", data);
         break;
+    }
+  }
+
+  /* -------------------------------------------------------
+     RPC-style API expected by joinin.html
+     ------------------------------------------------------- */
+
+  async getChannels() {
+    return this.channels;
+  }
+
+  async getUsers() {
+    return this.users;
+  }
+
+  async getCurrentChannel() {
+    return this.currentChannel;
+  }
+
+  /* Convert channel ID → path internally */
+  joinChannel(id) {
+    const ch = this.channels.find(c => c.id === id);
+    const path = ch ? ch.path : "/";
+
+    this.ws.send(JSON.stringify({
+      type: "tt-join",
+      channel: path
+    }));
+  }
+
+  sendChat(text) {
+    this.ws.send(JSON.stringify({
+      type: "tt-chat",
+      text
+    }));
+  }
+
+  /* -------------------------------------------------------
+     AAC UI expects these global wrappers
+     ------------------------------------------------------- */
+
+  async connectEverything() {
+    await this.connect();
+  }
+
+  disconnectEverything() {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
     }
   }
 }
