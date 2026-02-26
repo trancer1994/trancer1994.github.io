@@ -262,13 +262,15 @@ class BridgeAdapter {
         updateReadyStatus(false);
         break;
 
-      case "connected":
-console.log("TT STATUS: CONNECTED (BridgeAdapter)");
-        this.ttStatus.textContent = "TeamTalk: 🟢 Connected";
-        if (this.ttConnectTone) this.ttConnectTone.play();
-        this.vibrate([80, 40, 80]);
-        updateReadyStatus(true);
-        break;
+ case "connected":
+  this.ttStatus.textContent = "TeamTalk: 🟢 Connected";
+  if (this.ttConnectTone) this.ttConnectTone.play();
+  this.vibrate([80, 40, 80]);
+  updateReadyStatus(true);
+
+  console.log("TT STATUS: CONNECTED (BridgeAdapter)");
+  this.emit("tt-connected");   // ★ NEW: tells UI that TT login is complete
+  break;
 
       case "failed":
         this.ttStatus.textContent = "TeamTalk: 🔴 Failed";
