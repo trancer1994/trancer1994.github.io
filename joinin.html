@@ -397,7 +397,8 @@ function updateReadyStatus(isReady) {
 }
 </script>
 
-  <script src="bridge.js"></script>
+<!-- NEW BRIDGE -->
+<script src="bridge.js"></script>
 
 <script>
 /* ---------------------------------------------------------
@@ -458,7 +459,6 @@ function updateChannelList(channels) {
     ul.appendChild(li);
   });
 
-  /* Visual cue for channel change */
   if (window._flashChannelChange) {
     ul.style.background = "#e8eef7";
     setTimeout(() => { ul.style.background = ""; }, 600);
@@ -482,7 +482,6 @@ function updateUserList(users) {
     ul.appendChild(li);
   });
 
-  /* Visual cue: user joined */
   if (window._flashUserJoin) {
     const li = document.querySelector(`#user-list li[data-id="${window._flashUserJoin}"]`);
     if (li) {
@@ -492,7 +491,6 @@ function updateUserList(users) {
     window._flashUserJoin = null;
   }
 
-  /* Visual cue: user left */
   if (window._flashUserLeave) {
     const li = document.querySelector(`#user-list li[data-id="${window._flashUserLeave}"]`);
     if (li) {
@@ -509,13 +507,13 @@ function updateCurrentChannel(ch) {
 }
 
 /* ---------------------------------------------------------
-   3. POLLING LOOP (fixes stale UI + ghost sessions)
+   3. POLLING LOOP
    --------------------------------------------------------- */
 
 let refreshInterval = null;
 
 function startPolling() {
-  refreshUI(); // initial sync
+  refreshUI();
   refreshInterval = setInterval(refreshUI, 4000);
 }
 
@@ -524,7 +522,7 @@ function stopPolling() {
 }
 
 /* ---------------------------------------------------------
-   4. PAGE VISIBILITY + BFCache RESTORE FIXES
+   4. VISIBILITY + BFCache FIXES
    --------------------------------------------------------- */
 
 document.addEventListener("visibilitychange", () => {
@@ -540,7 +538,7 @@ window.addEventListener("pageshow", (event) => {
 });
 
 /* ---------------------------------------------------------
-   5. BRIDGE EVENT HOOKS (instant updates)
+   5. BRIDGE EVENT HOOKS
    --------------------------------------------------------- */
 
 bridge.on("connected", refreshUI);
@@ -556,6 +554,38 @@ bridge.on("channel-changed", refreshUI);
 
 window.addEventListener("load", startPolling);
 window.addEventListener("beforeunload", stopPolling);
+
+/* ---------------------------------------------------------
+   7. LEGACY API COMPATIBILITY LAYER
+   --------------------------------------------------------- */
+
+function connectEverything() {
+  return bridge.connectEverything();
+}
+
+function disconnectEverything() {
+  return bridge.disconnectEverything();
+}
+
+function sendChat(text) {
+  return bridge.sendChat(text);
+}
+
+function joinChannel(id) {
+  return bridge.joinChannel(id);
+}
+
+async function getChannels() {
+  return await bridge.getChannels();
+}
+
+async function getUsers() {
+  return await bridge.getUsers();
+}
+
+async function getCurrentChannel() {
+  return await bridge.getCurrentChannel();
+}
 </script>
 
 </body>
