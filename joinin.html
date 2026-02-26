@@ -104,13 +104,9 @@
     background: var(--danger);
   }
 
-  #status-panel {
-    margin: 0.5rem 0;
-    padding: 0.5rem;
-    border-radius: 6px;
-    background: var(--accent-soft);
-    font-size: 0.9rem;
-  }
+#status-panel {
+  display: none;
+}
 
   #sound-toggle,
   #presence-toggle {
@@ -236,20 +232,20 @@
   <!-- LEFT PANEL -->
   <div id="left-panel" aria-label="AAC controls and connection" role="region">
 
-    <button id="connect-btn"
-            class="aac-button disconnected"
-            onclick="connectEverything()"
-            aria-label="Connect to bridge and TeamTalk">
-      Connect
-    </button>
+<button id="connect-btn"
+        class="aac-button disconnected"
+        onclick="bridge.connectEverything()"
+        aria-label="Connect to start communicating">
+  Connect
+</button>
 
-    <button id="disconnect-btn"
-            class="aac-button"
-            onclick="disconnectEverything()"
-            style="display:none;"
-            aria-label="Disconnect from bridge and TeamTalk">
-      Disconnect
-    </button>
+<button id="disconnect-btn"
+        class="aac-button"
+        onclick="bridge.disconnectEverything()"
+        style="display:none;"
+        aria-label="Disconnect from the conversation">
+  Disconnect
+</button>
 
     <div id="status-panel" role="status" aria-live="polite">
       <div id="bridge-status">Bridge: 🔴 Disconnected</div>
