@@ -116,13 +116,14 @@ class BridgeAdapter {
             username: this.username
           }));
 
-          // TeamTalk login request
+          // TeamTalk login request (now with nickname)
           this.ws.send(JSON.stringify({
             type: "tt-connect",
             host: window._ttHost || "localhost",
             port: window._ttPort || 10333,
             username: this.username,
-            password: this.password
+            password: this.password,
+            nickname: this.username
           }));
 
           this.startKeepalive();
