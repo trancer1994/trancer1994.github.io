@@ -1,14 +1,15 @@
 /* ---------------------------------------------------------
-   Connecting Worlds – AAC‑Friendly Bridge Adapter (Final)
+   Connecting Worlds – Unified Bridge Adapter (2026 Spec)
+   ---------------------------------------------------------
    Features:
-   • TT connect/disconnect tones
-   • Presence logging
-   • Error banners
-   • Auto‑reconnect with retry cap
-   • Keepalive pings
-   • Reconnecting indicator
+   • WebSocket handshake + reconnect
+   • TeamTalk connect/disconnect
    • TT identity announcement
-   • Vibration cues with toggle
+   • Updated TT status phases
+   • Updated channel/user list formats
+   • Presence tones + vibration cues
+   • Keepalive pings
+   • Accessible error banners
    • “Ready to send” indicator
    --------------------------------------------------------- */
 
@@ -23,7 +24,7 @@ class BridgeAdapter {
     this.channels = [];
     this.users = [];
     this.currentChannel = { name: "/", path: "/" };
-    this.username = null; // set when you know it from UI, if desired
+    this.username = null;
 
     // Presence tones
     this.joinTone = document.getElementById("sound-presence-join");
@@ -43,7 +44,6 @@ class BridgeAdapter {
     this.bridgeStatus = document.getElementById("bridge-status");
     this.ttStatus = document.getElementById("tt-status");
 
-    // Initial ready state
     updateReadyStatus(false);
   }
 
@@ -62,7 +62,7 @@ class BridgeAdapter {
   }
 
   /* -------------------------------------------------------
-     Utility: vibration cue (honours global toggle)
+     Utility: vibration cue
      ------------------------------------------------------- */
   vibrate(pattern) {
     if (window._vibrationEnabled && navigator.vibrate) {
@@ -71,7 +71,7 @@ class BridgeAdapter {
   }
 
   /* -------------------------------------------------------
-     Error banner (accessible)
+     Accessible error banner
      ------------------------------------------------------- */
   showError(msg) {
     let banner = document.getElementById("error-banner");
@@ -102,13 +102,13 @@ class BridgeAdapter {
   }
 
   /* -------------------------------------------------------
-     WebSocket connection + auto‑reconnect with cap
+     WebSocket connection + auto‑reconnect
      ------------------------------------------------------- */
   connect() {
     return new Promise((resolve, reject) => {
       try {
         this.manualDisconnect = false;
-        this.bridgeStatus.textContent = "Bridge: 🟡 Trying to connect…";
+        this.bridgeStatus.textContent = "Bridge: 🟡 Connecting…";
         updateReadyStatus(false);
 
         this.ws = new WebSocket("wss://connectingworlds-bridge.onrender.com");
@@ -119,12 +119,27 @@ class BridgeAdapter {
           this.bridgeStatus.textContent = "Bridge: 🟢 Connected";
           this.emit("connected");
 
-          // Handshake
+          // Initial handshake
           this.ws.send(JSON.stringify({ type: "handshake" }));
 
-          // Start keepalive
-          this.startKeepalive();
+          // Identity announcement (optional)
+          if (this.username) {
+            this.ws.send(JSON.stringify({
+              type: "tt-identify",
+              username: this.username
+            }));
+          }
 
+          // Request TeamTalk connection
+          this.ws.send(JSON.stringify({
+            type: "tt-connect",
+            host: window._ttHost || "localhost",
+            port: window._ttPort || 10333,
+            username: this.username || "WebClient",
+            password: window._ttPassword || ""
+          }));
+
+          this.startKeepalive();
           resolve();
         };
 
@@ -196,7 +211,7 @@ class BridgeAdapter {
 
     switch (data.type) {
 
-      /* Presence tones + logging + vibration */
+      /* Presence */
       case "presence-join":
         if (this.joinTone) this.joinTone.play();
         this.vibrate([40, 40, 40]);
@@ -218,40 +233,18 @@ class BridgeAdapter {
         this.emit("channel-change", data);
         break;
 
-      /* TeamTalk state */
+      /* TeamTalk status phases */
       case "tt-status":
-        if (data.phase === "connected") {
-          this.ttStatus.textContent = "TeamTalk: 🟢 Connected";
-          if (this.ttConnectTone) this.ttConnectTone.play();
-          this.vibrate([80, 40, 80]);
-          updateReadyStatus(true);
-
-          if (this.username) {
-            logPresence(`Connected to TeamTalk as ${this.username}`);
-          } else {
-            logPresence("Connected to TeamTalk.");
-          }
-        }
-
-        if (data.phase === "disconnected") {
-          this.ttStatus.textContent = "TeamTalk: 🔴 Disconnected";
-          if (this.ttDisconnectTone) this.ttDisconnectTone.play();
-          this.vibrate([120]);
-          updateReadyStatus(false);
-        }
-
-        if (data.phase === "error") {
-          this.showError("TeamTalk error: " + data.message);
-          updateReadyStatus(false);
-        }
+        this.handleTTStatus(data);
         break;
 
-      case "tt-channel-list":
+      /* Updated TT lists */
+      case "tt-channel-list-full":
         this.channels = data.channels || [];
         this.emit("channel-added");
         break;
 
-      case "tt-user-list":
+      case "tt-user-list-full":
         this.users = data.users || [];
         this.emit("user-connected");
         break;
@@ -271,9 +264,45 @@ class BridgeAdapter {
   }
 
   /* -------------------------------------------------------
-     RPC-style API expected by joinin.html
+     TeamTalk status handler
      ------------------------------------------------------- */
+  handleTTStatus(data) {
+    switch (data.phase) {
+      case "connecting":
+        this.ttStatus.textContent = "TeamTalk: 🟡 Connecting…";
+        updateReadyStatus(false);
+        break;
 
+      case "authenticating":
+        this.ttStatus.textContent = "TeamTalk: 🟡 Authenticating…";
+        updateReadyStatus(false);
+        break;
+
+      case "connected":
+        this.ttStatus.textContent = "TeamTalk: 🟢 Connected";
+        if (this.ttConnectTone) this.ttConnectTone.play();
+        this.vibrate([80, 40, 80]);
+        updateReadyStatus(true);
+        break;
+
+      case "failed":
+        this.ttStatus.textContent = "TeamTalk: 🔴 Failed";
+        this.showError("TeamTalk connection failed.");
+        updateReadyStatus(false);
+        break;
+
+      case "disconnected":
+        this.ttStatus.textContent = "TeamTalk: 🔴 Disconnected";
+        if (this.ttDisconnectTone) this.ttDisconnectTone.play();
+        this.vibrate([120]);
+        updateReadyStatus(false);
+        break;
+    }
+  }
+
+  /* -------------------------------------------------------
+     RPC API
+     ------------------------------------------------------- */
   async getChannels() {
     return this.channels;
   }
@@ -306,7 +335,6 @@ class BridgeAdapter {
   /* -------------------------------------------------------
      AAC UI wrappers
      ------------------------------------------------------- */
-
   async connectEverything() {
     await this.connect();
   }
