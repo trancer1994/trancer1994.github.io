@@ -14,38 +14,41 @@
    --------------------------------------------------------- */
 
 class BridgeAdapter {
-  constructor() {
-    this.ws = null;
-    this.handlers = {};
-    this.connected = false;
-    this.manualDisconnect = false;
+constructor() {
+  this.ws = null;
+  this.handlers = {};
+  this.connected = false;
+  this.manualDisconnect = false;
 
-    // Cached TeamTalk state
-    this.channels = [];
-    this.users = [];
-    this.currentChannel = { name: "/", path: "/" };
-    this.username = null;
+  // Cached TeamTalk state
+  this.channels = [];
+  this.users = [];
+  this.currentChannel = { name: "/", path: "/" };
 
-    // Presence tones
-    this.joinTone = document.getElementById("sound-presence-join");
-    this.leaveTone = document.getElementById("sound-presence-leave");
-    this.channelTone = document.getElementById("sound-channel-change");
+  // NEW: Pull username from HTML config immediately
+  this.username = window._ttUsername || "WebClient";
 
-    // TeamTalk tones
-    this.ttConnectTone = document.getElementById("sound-tt-connected");
-    this.ttDisconnectTone = document.getElementById("sound-tt-disconnected");
+  // Presence tones
+  this.joinTone = document.getElementById("sound-presence-join");
+  this.leaveTone = document.getElementById("sound-presence-leave");
+  this.channelTone = document.getElementById("sound-channel-change");
 
-    // Keepalive + reconnect
-    this.keepalive = null;
-    this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
+  // TeamTalk tones
+  this.ttConnectTone = document.getElementById("sound-tt-connected");
+  this.ttDisconnectTone = document.getElementById("sound-tt-disconnected");
 
-    // Status panel elements
-    this.bridgeStatus = document.getElementById("bridge-status");
-    this.ttStatus = document.getElementById("tt-status");
+  // Keepalive + reconnect
+  this.keepalive = null;
+  this.reconnectAttempts = 0;
+  this.maxReconnectAttempts = 5;
 
-    updateReadyStatus(false);
-  }
+  // Status panel elements
+  this.bridgeStatus = document.getElementById("bridge-status");
+  this.ttStatus = document.getElementById("tt-status");
+
+  // Initial UI state
+  updateReadyStatus(false);
+}
 
   /* -------------------------------------------------------
      Event system
@@ -105,6 +108,8 @@ class BridgeAdapter {
      WebSocket connection + auto‑reconnect
      ------------------------------------------------------- */
   connect() {
+bridge.username = window._ttUsername;
+bridge.connect();
     return new Promise((resolve, reject) => {
       try {
         this.manualDisconnect = false;
