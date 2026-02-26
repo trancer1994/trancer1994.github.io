@@ -263,6 +263,7 @@ class BridgeAdapter {
         break;
 
       case "connected":
+console.log("TT STATUS: CONNECTED (BridgeAdapter)");
         this.ttStatus.textContent = "TeamTalk: 🟢 Connected";
         if (this.ttConnectTone) this.ttConnectTone.play();
         this.vibrate([80, 40, 80]);
