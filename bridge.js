@@ -1,54 +1,39 @@
-/* ---------------------------------------------------------
-   Connecting Worlds – Unified Bridge Adapter (2026 Spec)
-   ---------------------------------------------------------
-   Features:
-   • WebSocket handshake + reconnect
-   • TeamTalk connect/disconnect
-   • TT identity announcement
-   • Updated TT status phases
-   • Updated channel/user list formats
-   • Presence tones + vibration cues
-   • Keepalive pings
-   • Accessible error banners
-   • “Ready to send” indicator
-   --------------------------------------------------------- */
-
 class BridgeAdapter {
-constructor() {
-  this.ws = null;
-  this.handlers = {};
-  this.connected = false;
-  this.manualDisconnect = false;
+  constructor() {
+    this.ws = null;
+    this.handlers = {};
+    this.connected = false;
+    this.manualDisconnect = false;
 
-  // Cached TeamTalk state
-  this.channels = [];
-  this.users = [];
-  this.currentChannel = { name: "/", path: "/" };
+    // Cached TeamTalk state
+    this.channels = [];
+    this.users = [];
+    this.currentChannel = { name: "/", path: "/" };
 
-  // NEW: Pull username from HTML config immediately
-  this.username = window._ttUsername || "WebClient";
+    // Credentials from HTML config
+    this.username = window._ttUsername || "WebClient";
+    this.password = window._ttPassword || "";
 
-  // Presence tones
-  this.joinTone = document.getElementById("sound-presence-join");
-  this.leaveTone = document.getElementById("sound-presence-leave");
-  this.channelTone = document.getElementById("sound-channel-change");
+    // Presence tones
+    this.joinTone = document.getElementById("sound-presence-join");
+    this.leaveTone = document.getElementById("sound-presence-leave");
+    this.channelTone = document.getElementById("sound-channel-change");
 
-  // TeamTalk tones
-  this.ttConnectTone = document.getElementById("sound-tt-connected");
-  this.ttDisconnectTone = document.getElementById("sound-tt-disconnected");
+    // TeamTalk tones
+    this.ttConnectTone = document.getElementById("sound-tt-connected");
+    this.ttDisconnectTone = document.getElementById("sound-tt-disconnected");
 
-  // Keepalive + reconnect
-  this.keepalive = null;
-  this.reconnectAttempts = 0;
-  this.maxReconnectAttempts = 5;
+    // Keepalive + reconnect
+    this.keepalive = null;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
 
-  // Status panel elements
-  this.bridgeStatus = document.getElementById("bridge-status");
-  this.ttStatus = document.getElementById("tt-status");
+    // Status panel elements
+    this.bridgeStatus = document.getElementById("bridge-status");
+    this.ttStatus = document.getElementById("tt-status");
 
-  // Initial UI state
-  updateReadyStatus(false);
-}
+    updateReadyStatus(false);
+  }
 
   /* -------------------------------------------------------
      Event system
@@ -108,8 +93,6 @@ constructor() {
      WebSocket connection + auto‑reconnect
      ------------------------------------------------------- */
   connect() {
-bridge.username = window._ttUsername;
-bridge.connect();
     return new Promise((resolve, reject) => {
       try {
         this.manualDisconnect = false;
@@ -127,21 +110,19 @@ bridge.connect();
           // Initial handshake
           this.ws.send(JSON.stringify({ type: "handshake" }));
 
-          // Identity announcement (optional)
-          if (this.username) {
-            this.ws.send(JSON.stringify({
-              type: "tt-identify",
-              username: this.username
-            }));
-          }
+          // Identity announcement
+          this.ws.send(JSON.stringify({
+            type: "tt-identify",
+            username: this.username
+          }));
 
-          // Request TeamTalk connection
+          // TeamTalk login request
           this.ws.send(JSON.stringify({
             type: "tt-connect",
             host: window._ttHost || "localhost",
             port: window._ttPort || 10333,
-            username: this.username || "WebClient",
-            password: window._ttPassword || ""
+            username: this.username,
+            password: this.password
           }));
 
           this.startKeepalive();
@@ -216,7 +197,6 @@ bridge.connect();
 
     switch (data.type) {
 
-      /* Presence */
       case "presence-join":
         if (this.joinTone) this.joinTone.play();
         this.vibrate([40, 40, 40]);
@@ -238,12 +218,10 @@ bridge.connect();
         this.emit("channel-change", data);
         break;
 
-      /* TeamTalk status phases */
       case "tt-status":
         this.handleTTStatus(data);
         break;
 
-      /* Updated TT lists */
       case "tt-channel-list-full":
         this.channels = data.channels || [];
         this.emit("channel-added");
