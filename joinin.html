@@ -389,7 +389,15 @@ function speakText(text) {
 }
 </script>
 
-<script src="bridge.js"></script>
+<script>
+function updateReadyStatus(isReady) {
+  const el = document.getElementById("ready-status");
+  if (!el) return;
+  el.textContent = "Ready to send: " + (isReady ? "YES" : "NO");
+}
+</script>
+
+  <script src="bridge.js"></script>
 
 <script>
 /* ---------------------------------------------------------
