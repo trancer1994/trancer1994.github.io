@@ -549,6 +549,10 @@ bridge.on("channel-removed", refreshUI);
 bridge.on("user-connected", refreshUI);
 bridge.on("user-disconnected", refreshUI);
 bridge.on("channel-changed", refreshUI);
+bridge.on("tt-connected", () => {
+  console.log("UI: TeamTalk connected event received");
+  refreshUI();
+});
 
 /* ---------------------------------------------------------
    6. START EVERYTHING
