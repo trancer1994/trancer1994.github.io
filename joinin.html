@@ -268,6 +268,17 @@
       Presence tones: ON
     </button>
 
+<button id="vibration-toggle"
+        onclick="toggleVibrationCues()"
+        aria-pressed="true">
+  Vibration cues: ON
+</button>
+
+<div id="ready-status"
+     role="status"
+     aria-live="polite">
+  Ready to send: NO
+</div>
     <button class="aac-button"
             onclick="speakText(document.getElementById('chat-input').value)">
       Speak Text
