@@ -402,7 +402,29 @@ function updateReadyStatus(isReady) {
 </script>
 <script src="bridge.js"></script>
 
+<script src="bridge.js"></script>
+
 <script>
+  // NEW: connection button updater
+  function updateConnectionButton(isConnected) {
+    const btn = document.getElementById("connect-btn");
+    if (!btn) return;
+
+    if (isConnected) {
+      btn.textContent = "Disconnect";
+      btn.classList.add("connected");
+    } else {
+      btn.textContent = "Connect";
+      btn.classList.remove("connected");
+    }
+  }
+
+  // NEW: listen for bridge events
+  bridge.on("connected", () => updateConnectionButton(true));
+  bridge.on("disconnected", () => updateConnectionButton(false));
+</script>
+
+  <script>
 /* ---------------------------------------------------------
    Presence log helper (used by bridge.js)
    --------------------------------------------------------- */
