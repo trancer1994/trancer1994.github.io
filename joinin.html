@@ -405,230 +405,218 @@ function updateReadyStatus(isReady) {
 <script src="bridge.js"></script>
 
 <script>
-  function updateConnectionButton(isConnected) {
-    // This will run AFTER the DOM exists
-    const btn = document.getElementById("connect-btn");
-    if (!btn) return;
+/* ---------------------------------------------------------
+   DOM READY WRAPPER
+   Ensures all UI elements exist before attaching listeners
+   --------------------------------------------------------- */
+window.addEventListener("DOMContentLoaded", () => {
 
-    if (isConnected) {
-      btn.textContent = "Disconnect";
-      btn.classList.add("connected");
-    } else {
-      btn.textContent = "Connect";
-      btn.classList.remove("connected");
+ /* ---------------------------------------------------------
+   1. CONNECTION BUTTON
+   --------------------------------------------------------- */
+function updateConnectionButton(isConnected) {
+  const connectBtn = document.getElementById("connect-btn");
+  const disconnectBtn = document.getElementById("disconnect-btn");
+
+  if (isConnected) {
+    connectBtn.style.display = "none";
+    disconnectBtn.style.display = "block";
+  } else {
+    connectBtn.style.display = "block";
+    disconnectBtn.style.display = "none";
+  }
+}
+
+bridge.on("connected", () => {
+  requestAnimationFrame(() => updateConnectionButton(true));
+});
+
+bridge.on("disconnected", () => {
+  requestAnimationFrame(() => updateConnectionButton(false));
+});
+
+
+  /* ---------------------------------------------------------
+     2. PRESENCE LOG
+     --------------------------------------------------------- */
+  function logPresence(text) {
+    const chat = document.getElementById("chat");
+    const p = document.createElement("p");
+    p.style.color = "#666";
+    p.style.fontSize = "0.85rem";
+    p.textContent = text;
+    chat.appendChild(p);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+
+  /* ---------------------------------------------------------
+     3. CENTRAL REFRESH FUNCTION
+     --------------------------------------------------------- */
+  async function refreshUI() {
+    try {
+      const channels = await bridge.getChannels();
+      const users = await bridge.getUsers();
+      const current = await bridge.getCurrentChannel();
+
+      updateChannelList(channels);
+      updateUserList(users);
+      updateCurrentChannel(current);
+
+    } catch (err) {
+      console.error("Refresh failed:", err);
     }
   }
 
-  // Attach listeners IMMEDIATELY so we never miss events
-  bridge.on("connected", () => {
-    // Delay DOM access until ready
-    requestAnimationFrame(() => updateConnectionButton(true));
-  });
 
-  bridge.on("disconnected", () => {
-    requestAnimationFrame(() => updateConnectionButton(false));
-  });
-</script>
+  /* ---------------------------------------------------------
+     4. DOM UPDATE HELPERS
+     --------------------------------------------------------- */
+  function updateChannelList(channels) {
+    const ul = document.getElementById("channel-list");
+    ul.innerHTML = "";
 
-  <script>
-/* ---------------------------------------------------------
-   Presence log helper (used by bridge.js)
-   --------------------------------------------------------- */
-function logPresence(text) {
-  const chat = document.getElementById("chat");
-  const p = document.createElement("p");
-  p.style.color = "#666";
-  p.style.fontSize = "0.85rem";
-  p.textContent = text;
-  chat.appendChild(p);
-  chat.scrollTop = chat.scrollHeight;
-}
+    if (!channels || channels.length === 0) {
+      ul.innerHTML = "<li>[No channels yet]</li>";
+      return;
+    }
 
-/* ---------------------------------------------------------
-   1. CENTRAL REFRESH FUNCTION
-   --------------------------------------------------------- */
+    channels.forEach(ch => {
+      const li = document.createElement("li");
+      li.textContent = ch.name;
+      li.tabIndex = 0;
+      li.onclick = () => bridge.joinChannel(ch.id);
+      li.onkeydown = (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          bridge.joinChannel(ch.id);
+        }
+      };
+      ul.appendChild(li);
+    });
 
-async function refreshUI() {
-  try {
-    const channels = await bridge.getChannels();
-    const users = await bridge.getUsers();
-    const current = await bridge.getCurrentChannel();
-
-    updateChannelList(channels);
-    updateUserList(users);
-    updateCurrentChannel(current);
-
-  } catch (err) {
-    console.error("Refresh failed:", err);
-  }
-}
-
-/* ---------------------------------------------------------
-   2. DOM UPDATE HELPERS
-   --------------------------------------------------------- */
-
-function updateChannelList(channels) {
-  const ul = document.getElementById("channel-list");
-  ul.innerHTML = "";
-
-  if (!channels || channels.length === 0) {
-    ul.innerHTML = "<li>[No channels yet]</li>";
-    return;
+    if (window._flashChannelChange) {
+      ul.style.background = "#e8eef7";
+      setTimeout(() => { ul.style.background = ""; }, 600);
+      window._flashChannelChange = false;
+    }
   }
 
-  channels.forEach(ch => {
-    const li = document.createElement("li");
-    li.textContent = ch.name;
-    li.tabIndex = 0;
-    li.onclick = () => bridge.joinChannel(ch.id);
-    li.onkeydown = (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        bridge.joinChannel(ch.id);
+  function updateUserList(users) {
+    const ul = document.getElementById("user-list");
+    ul.innerHTML = "";
+
+    if (!users || users.length === 0) {
+      ul.innerHTML = "<li>[No users yet]</li>";
+      return;
+    }
+
+    users.forEach(u => {
+      const li = document.createElement("li");
+      li.textContent = u.nickname;
+      li.dataset.id = u.id;
+      ul.appendChild(li);
+    });
+
+    if (window._flashUserJoin) {
+      const li = document.querySelector(`#user-list li[data-id="${window._flashUserJoin}"]`);
+      if (li) {
+        li.classList.add("user-flash-join");
+        setTimeout(() => li.classList.remove("user-flash-join"), 1000);
       }
-    };
-    ul.appendChild(li);
+      window._flashUserJoin = null;
+    }
+
+    if (window._flashUserLeave) {
+      const li = document.querySelector(`#user-list li[data-id="${window._flashUserLeave}"]`);
+      if (li) {
+        li.classList.add("user-flash-leave");
+        setTimeout(() => li.classList.remove("user-flash-leave"), 1000);
+      }
+      window._flashUserLeave = null;
+    }
+  }
+
+  function updateCurrentChannel(ch) {
+    const label = document.getElementById("current-channel-label");
+    label.textContent = ch ? ch.name : "/";
+  }
+
+
+  /* ---------------------------------------------------------
+     5. POLLING LOOP
+     --------------------------------------------------------- */
+  let refreshInterval = null;
+
+  function startPolling() {
+    refreshUI();
+    refreshInterval = setInterval(refreshUI, 4000);
+  }
+
+  function stopPolling() {
+    if (refreshInterval) clearInterval(refreshInterval);
+  }
+
+
+  /* ---------------------------------------------------------
+     6. VISIBILITY + BFCache FIXES
+     --------------------------------------------------------- */
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      refreshUI();
+    }
   });
 
-  if (window._flashChannelChange) {
-    ul.style.background = "#e8eef7";
-    setTimeout(() => { ul.style.background = ""; }, 600);
-    window._flashChannelChange = false;
-  }
-}
-
-function updateUserList(users) {
-  const ul = document.getElementById("user-list");
-  ul.innerHTML = "";
-
-  if (!users || users.length === 0) {
-    ul.innerHTML = "<li>[No users yet]</li>";
-    return;
-  }
-
-  users.forEach(u => {
-    const li = document.createElement("li");
-    li.textContent = u.nickname;
-    li.dataset.id = u.id;
-    ul.appendChild(li);
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) {
+      refreshUI();
+    }
   });
 
-  if (window._flashUserJoin) {
-    const li = document.querySelector(`#user-list li[data-id="${window._flashUserJoin}"]`);
-    if (li) {
-      li.classList.add("user-flash-join");
-      setTimeout(() => li.classList.remove("user-flash-join"), 1000);
-    }
-    window._flashUserJoin = null;
-  }
 
-  if (window._flashUserLeave) {
-    const li = document.querySelector(`#user-list li[data-id="${window._flashUserLeave}"]`);
-    if (li) {
-      li.classList.add("user-flash-leave");
-      setTimeout(() => li.classList.remove("user-flash-leave"), 1000);
-    }
-    window._flashUserLeave = null;
-  }
-}
+  /* ---------------------------------------------------------
+     7. BRIDGE EVENT HOOKS
+     --------------------------------------------------------- */
+  bridge.on("connected", refreshUI);
+  bridge.on("channel-added", refreshUI);
+  bridge.on("channel-removed", refreshUI);
+  bridge.on("user-connected", refreshUI);
+  bridge.on("user-disconnected", refreshUI);
 
-function updateCurrentChannel(ch) {
-  const label = document.getElementById("current-channel-label");
-  label.textContent = ch ? ch.name : "/";
-}
+  bridge.on("channel-change", () => {
+    window._flashChannelChange = true;
+    requestAnimationFrame(refreshUI);
+  });
 
-/* ---------------------------------------------------------
-   3. POLLING LOOP
-   --------------------------------------------------------- */
+  bridge.on("channel-changed", () => {
+    window._flashChannelChange = true;
+    requestAnimationFrame(refreshUI);
+  });
 
-let refreshInterval = null;
-
-function startPolling() {
-  refreshUI();
-  refreshInterval = setInterval(refreshUI, 4000);
-}
-
-function stopPolling() {
-  if (refreshInterval) clearInterval(refreshInterval);
-}
-
-/* ---------------------------------------------------------
-   4. VISIBILITY + BFCache FIXES
-   --------------------------------------------------------- */
-
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") {
+  bridge.on("tt-connected", () => {
+    console.log("UI: TeamTalk connected event received");
     refreshUI();
-  }
+  });
+
+
+  /* ---------------------------------------------------------
+     8. START EVERYTHING
+     --------------------------------------------------------- */
+  window.addEventListener("load", startPolling);
+  window.addEventListener("beforeunload", stopPolling);
+
+
+  /* ---------------------------------------------------------
+     9. LEGACY API WRAPPERS
+     --------------------------------------------------------- */
+  window.connectEverything = () => bridge.connectEverything();
+  window.disconnectEverything = () => bridge.disconnectEverything();
+  window.sendChat = (text) => bridge.sendChat(text);
+  window.joinChannel = (id) => bridge.joinChannel(id);
+  window.getChannels = () => bridge.getChannels();
+  window.getUsers = () => bridge.getUsers();
+  window.getCurrentChannel = () => bridge.getCurrentChannel();
+
 });
-
-window.addEventListener("pageshow", (event) => {
-  if (event.persisted) {
-    refreshUI();
-  }
-});
-
-/* ---------------------------------------------------------
-   5. BRIDGE EVENT HOOKS
-   --------------------------------------------------------- */
-
-bridge.on("connected", refreshUI);
-bridge.on("channel-added", refreshUI);
-bridge.on("channel-removed", refreshUI);
-bridge.on("user-connected", refreshUI);
-bridge.on("user-disconnected", refreshUI);
-bridge.on("channel-change", () => {
-  window._flashChannelChange = true;
-  requestAnimationFrame(refreshUI);
-});
-
-bridge.on("channel-changed", () => {
-  window._flashChannelChange = true;
-  requestAnimationFrame(refreshUI);
-});
-bridge.on("tt-connected", () => {
-  console.log("UI: TeamTalk connected event received");
-  refreshUI();
-});
-
-/* ---------------------------------------------------------
-   6. START EVERYTHING
-   --------------------------------------------------------- */
-
-window.addEventListener("load", startPolling);
-window.addEventListener("beforeunload", stopPolling);
-
-/* ---------------------------------------------------------
-   7. LEGACY API COMPATIBILITY LAYER
-   --------------------------------------------------------- */
-
-function connectEverything() {
-  return bridge.connectEverything();
-}
-
-function disconnectEverything() {
-  return bridge.disconnectEverything();
-}
-
-function sendChat(text) {
-  return bridge.sendChat(text);
-}
-
-function joinChannel(id) {
-  return bridge.joinChannel(id);
-}
-
-async function getChannels() {
-  return await bridge.getChannels();
-}
-
-async function getUsers() {
-  return await bridge.getUsers();
-}
-
-async function getCurrentChannel() {
-  return await bridge.getCurrentChannel();
-}
 </script>
-
 </body>
 </html>
