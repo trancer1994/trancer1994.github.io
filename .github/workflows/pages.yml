@@ -19,8 +19,7 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      # If your site has no build step, this is fine.
-      # Otherwise insert your build commands here.
+      # No build step needed for a static site
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
