@@ -84,7 +84,7 @@
   .aac-button,
   button {
     font-size: 0.95rem;
-    padding: 0.5rem 0.75rem;
+   padding: 0.75rem 1rem;
     border-radius: 6px;
     border: none;
     cursor: pointer;
@@ -232,10 +232,11 @@
   <!-- LEFT PANEL -->
   <div id="left-panel" aria-label="AAC controls and connection" role="region">
 
-<button id="connect-btn"
+<div role="group" aria-label="Connection controls">
+  <button id="connect-btn"
         class="aac-button disconnected"
         onclick="bridge.connectEverything()"
-        aria-label="Connect to start communicating">
+        aria-label="Connect">
   Connect
 </button>
 
@@ -243,10 +244,10 @@
         class="aac-button"
         onclick="bridge.disconnectEverything()"
         style="display:none;"
-        aria-label="Disconnect from the conversation">
+        aria-label="Disconnect">
   Disconnect
 </button>
-
+</div>
     <div id="status-panel" role="status" aria-live="polite">
       <div id="bridge-status">Bridge: 🔴 Disconnected</div>
       <div id="tt-status">TeamTalk: 🔴 Disconnected</div>
