@@ -405,8 +405,8 @@ function updateReadyStatus(isReady) {
 <script src="bridge.js"></script>
 
 <script>
-  // NEW: connection button updater
   function updateConnectionButton(isConnected) {
+    // This will run AFTER the DOM exists
     const btn = document.getElementById("connect-btn");
     if (!btn) return;
 
@@ -419,9 +419,15 @@ function updateReadyStatus(isReady) {
     }
   }
 
-  // NEW: listen for bridge events
-  bridge.on("connected", () => updateConnectionButton(true));
-  bridge.on("disconnected", () => updateConnectionButton(false));
+  // Attach listeners IMMEDIATELY so we never miss events
+  bridge.on("connected", () => {
+    // Delay DOM access until ready
+    requestAnimationFrame(() => updateConnectionButton(true));
+  });
+
+  bridge.on("disconnected", () => {
+    requestAnimationFrame(() => updateConnectionButton(false));
+  });
 </script>
 
   <script>
@@ -570,7 +576,15 @@ bridge.on("channel-added", refreshUI);
 bridge.on("channel-removed", refreshUI);
 bridge.on("user-connected", refreshUI);
 bridge.on("user-disconnected", refreshUI);
-bridge.on("channel-changed", refreshUI);
+bridge.on("channel-change", () => {
+  window._flashChannelChange = true;
+  requestAnimationFrame(refreshUI);
+});
+
+bridge.on("channel-changed", () => {
+  window._flashChannelChange = true;
+  requestAnimationFrame(refreshUI);
+});
 bridge.on("tt-connected", () => {
   console.log("UI: TeamTalk connected event received");
   refreshUI();
