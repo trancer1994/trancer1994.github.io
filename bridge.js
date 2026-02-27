@@ -249,16 +249,14 @@ case "tt-user-list-full":      // keep legacy support
     }
   }
 
- handleTTStatus(data) {
+handleTTStatus(data) {
   switch (data.phase) {
 
-    // Ignore noisy phases for AAC users
     case "received":
     case "login-sent":
     case "server-message":
     case "connecting":
     case "authenticating":
-      // Do nothing — keep UI quiet
       break;
 
     case "connected":
@@ -283,13 +281,7 @@ case "tt-user-list-full":      // keep legacy support
       break;
   }
 }
-
-  }
-
-  /* -------------------------------------------------------
-     RPC API
-     ------------------------------------------------------- */
-  async getChannels() {
+async getChannels() {
     return this.channels;
   }
 
