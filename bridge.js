@@ -223,15 +223,17 @@ class BridgeAdapter {
         this.handleTTStatus(data);
         break;
 
-      case "tt-channel-list-full":
-        this.channels = data.channels || [];
-        this.emit("channel-added");
-        break;
+ case "tt-channel-list":
+case "tt-channel-list-full":   // keep legacy support
+  this.channels = data.channels || [];
+  this.emit("channel-added");
+  break;
 
-      case "tt-user-list-full":
-        this.users = data.users || [];
-        this.emit("user-connected");
-        break;
+case "tt-user-list":
+case "tt-user-list-full":      // keep legacy support
+  this.users = data.users || [];
+  this.emit("user-connected");
+  break;
 
       case "tt-current-channel":
         this.currentChannel = {
@@ -247,44 +249,41 @@ class BridgeAdapter {
     }
   }
 
-  /* -------------------------------------------------------
-     TeamTalk status handler
-     ------------------------------------------------------- */
-  handleTTStatus(data) {
-    switch (data.phase) {
-      case "connecting":
-        this.ttStatus.textContent = "TeamTalk: 🟡 Connecting…";
-        updateReadyStatus(false);
-        break;
+ handleTTStatus(data) {
+  switch (data.phase) {
 
-      case "authenticating":
-        this.ttStatus.textContent = "TeamTalk: 🟡 Authenticating…";
-        updateReadyStatus(false);
-        break;
+    // Ignore noisy phases for AAC users
+    case "received":
+    case "login-sent":
+    case "server-message":
+    case "connecting":
+    case "authenticating":
+      // Do nothing — keep UI quiet
+      break;
 
- case "connected":
-  this.ttStatus.textContent = "TeamTalk: 🟢 Connected";
-  if (this.ttConnectTone) this.ttConnectTone.play();
-  this.vibrate([80, 40, 80]);
-  updateReadyStatus(true);
+    case "connected":
+      this.ttStatus.textContent = "TeamTalk: 🟢 Connected";
+      if (this.ttConnectTone) this.ttConnectTone.play();
+      this.vibrate([80, 40, 80]);
+      updateReadyStatus(true);
+      this.emit("tt-connected");
+      break;
 
-  console.log("TT STATUS: CONNECTED (BridgeAdapter)");
-  this.emit("tt-connected");   // ★ NEW: tells UI that TT login is complete
-  break;
+    case "failed":
+      this.ttStatus.textContent = "TeamTalk: 🔴 Failed";
+      this.showError("TeamTalk connection failed.");
+      updateReadyStatus(false);
+      break;
 
-      case "failed":
-        this.ttStatus.textContent = "TeamTalk: 🔴 Failed";
-        this.showError("TeamTalk connection failed.");
-        updateReadyStatus(false);
-        break;
+    case "disconnected":
+      this.ttStatus.textContent = "TeamTalk: 🔴 Disconnected";
+      if (this.ttDisconnectTone) this.ttDisconnectTone.play();
+      this.vibrate([120]);
+      updateReadyStatus(false);
+      break;
+  }
+}
 
-      case "disconnected":
-        this.ttStatus.textContent = "TeamTalk: 🔴 Disconnected";
-        if (this.ttDisconnectTone) this.ttDisconnectTone.play();
-        this.vibrate([120]);
-        updateReadyStatus(false);
-        break;
-    }
   }
 
   /* -------------------------------------------------------
