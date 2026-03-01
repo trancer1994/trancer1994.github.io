@@ -406,13 +406,32 @@ function updateReadyStatus(isReady) {
 <script src="bridge.js"></script>
 
 <script>
-/* ---------------------------------------------------------
-   DOM READY WRAPPER
-   Ensures all UI elements exist before attaching listeners
-   --------------------------------------------------------- */
 window.addEventListener("DOMContentLoaded", () => {
 
- /* ---------------------------------------------------------
+   /* ---------------------------------------------------------
+     NICKNAME RESOLUTION MODULE
+     --------------------------------------------------------- */
+  function resolveNickname() {
+    // 1. TeamTalk nickname (if bridge exposes it)
+    const ttNick = bridge?.getMyNickname?.();
+    if (ttNick && ttNick.trim()) return ttNick.trim();
+
+    // 2. URL parameter (?nick=...)
+    const params = new URLSearchParams(location.search);
+    const urlNick = params.get("nick");
+    if (urlNick && urlNick.trim()) {
+      localStorage.setItem("cw_nickname", urlNick.trim());
+      return urlNick.trim();
+    }
+
+    // 3. Local storage
+    const lsNick = localStorage.getItem("cw_nickname");
+    if (lsNick && lsNick.trim()) return lsNick.trim();
+
+    // 4. Fallback
+    return "Guest";
+  }
+/* ---------------------------------------------------------
    1. CONNECTION BUTTON
    --------------------------------------------------------- */
 function updateConnectionButton(isConnected) {
