@@ -1,1 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Connecting Worlds setup</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <style>
+      body { font-family: system-ui, sans-serif; padding: 1rem; }
+      label, input, button { font-size: 1rem; }
+      #qrcode { margin-top: 1rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Connecting Worlds – Caregiver setup</h1>
+
+    <label for="nick">Preferred nickname:</label>
+    <input id="nick" type="text" autocomplete="off">
+
+    <div style="margin-top: 0.75rem;">
+      <button id="saveLocal">Save on this device</button>
+      <button id="makeQR">Make QR code</button>
+    </div>
+
+    <p id="shortUrl"></p>
+    <canvas id="qrcode"></canvas>
+
+    <script>
+      const nickInput = document.getElementById("nick");
+      const saveLocal = document.getElementById("saveLocal");
+      const makeQR    = document.getElementById("makeQR");
+      const shortUrlP = document.getElementById("shortUrl");
+      const qrCanvas  = document.getElementById("qrcode");
+
+      const BASE_SHORT = "https://trancer1994.github.io/j";
+
+      saveLocal.addEventListener("click", () => {
+        const nick = nickInput.value.trim();
+        if (!nick) return;
+        localStorage.setItem("cw_nickname", nick);
+        alert("Nickname saved on this device.");
+      });
+
+      makeQR.addEventListener("click", () => {
+        const nick = nickInput.value.trim();
+        if (!nick) return;
+
+        const url = BASE_SHORT + "?nick=" + encodeURIComponent(nick);
+        shortUrlP.textContent = "Short URL: " + url;
+
+        QRCode.toCanvas(qrCanvas, url, { width: 200 }, err => {
+          if (err) console.error(err);
+        });
+      });
+    </script>
+ <div style="margin-top: 1rem;">
+  <button id="showCode">Show simple code</button>
+  <p id="codeOut"></p>
+</div>
+
+<script>
+  const showCode = document.getElementById("showCode");
+  const codeOut  = document.getElementById("codeOut");
+
+  showCode.addEventListener("click", () => {
+    const nick = nickInput.value.trim();
+    if (!nick) return;
+
+    // Very simple deterministic hash → 4 digits
+    let hash = 0;
+    for (let i = 0; i < nick.length; i++) {
+      hash = (hash * 31 + nick.charCodeAt(i)) >>> 0;
+    }
+    const code = (hash % 9000 + 1000).toString(); // 1000–9999
+
+    codeOut.textContent = "Code for this nickname: " + code +
+      " (use ?code=" + code + " on the user’s device)";
+
+    // In a more advanced version, you could store code→nick mapping somewhere shared.
+  });
+</script>
+ </body>
+</html>
 
