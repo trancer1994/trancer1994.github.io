@@ -1,4 +1,18 @@
-<script>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Connecting Worlds</title>
+    <script>
+      // Pass through any query params (?nick=..., ?code=...)
+      const params = location.search || "";
+      location.href = "joinin.html" + params;
+    </script>
+  </head>
+  <body>
+ <script>
   const params = location.search;
   location.href = "joinin.html" + params;
 </script>
+    </body>
+</html>
