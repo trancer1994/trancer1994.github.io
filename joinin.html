@@ -233,9 +233,9 @@
   <div id="left-panel" aria-label="AAC controls and connection" role="region">
 
 <div role="group" aria-label="Connection controls">
-  <button id="connect-btn"
+ <button id="connect-btn"
         class="aac-button disconnected"
-        onclick="bridge.connectEverything()"
+        onclick="connectWithNickname()"
         aria-label="Connect">
   Connect
 </button>
@@ -424,6 +424,15 @@ window.addEventListener("DOMContentLoaded", () => {
       return urlNick.trim();
     }
 
+// 3. Numeric code (?code=1234)
+const code = params.get("code");
+if (code) {
+  const mapped = localStorage.getItem("cw_code_" + code);
+  if (mapped && mapped.trim()) {
+    localStorage.setItem("cw_nickname", mapped.trim());
+    return mapped.trim();
+  }
+}
     // 3. Local storage
     const lsNick = localStorage.getItem("cw_nickname");
     if (lsNick && lsNick.trim()) return lsNick.trim();
@@ -431,6 +440,29 @@ window.addEventListener("DOMContentLoaded", () => {
     // 4. Fallback
     return "Guest";
   }
+function flashNickname(nick) {
+  const chat = document.getElementById("chat");
+  const p = document.createElement("p");
+  p.textContent = "Using nickname: " + nick;
+  p.style.background = "#e8f5e9";
+  p.style.padding = "6px";
+  p.style.borderRadius = "6px";
+  p.style.fontWeight = "bold";
+  p.style.color = "#2e7d32";
+  chat.appendChild(p);
+  chat.scrollTop = chat.scrollHeight;
+
+  setTimeout(() => p.remove(), 4000);
+}
+/* ---------------------------------------------------------
+   CONNECT WRAPPER (inject nickname)
+   --------------------------------------------------------- */
+window.connectWithNickname = () => {
+  const nickname = resolveNickname();
+  bridge.username = nickname;
+  flashNickname(nickname);
+  bridge.connectEverything();
+};
 /* ---------------------------------------------------------
    1. CONNECTION BUTTON
    --------------------------------------------------------- */
@@ -628,7 +660,7 @@ bridge.on("disconnected", () => {
   /* ---------------------------------------------------------
      9. LEGACY API WRAPPERS
      --------------------------------------------------------- */
-  window.connectEverything = () => bridge.connectEverything();
+window.connectWithNickname = () => { … }
   window.disconnectEverything = () => bridge.disconnectEverything();
   window.sendChat = (text) => bridge.sendChat(text);
   window.joinChannel = (id) => bridge.joinChannel(id);
