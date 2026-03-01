@@ -78,6 +78,33 @@
     // In a more advanced version, you could store code→nick mapping somewhere shared.
   });
 </script>
- </body>
+ <div style="margin-top: 1rem;">
+  <button id="makeCode">Generate 4‑digit code</button>
+  <p id="codeOut"></p>
+</div>
+
+<script>
+  const makeCode = document.getElementById("makeCode");
+  const codeOut  = document.getElementById("codeOut");
+
+  makeCode.addEventListener("click", () => {
+    const nick = nickInput.value.trim();
+    if (!nick) return;
+
+    // Deterministic 4‑digit hash
+    let hash = 0;
+    for (let i = 0; i < nick.length; i++) {
+      hash = (hash * 31 + nick.charCodeAt(i)) >>> 0;
+    }
+    const code = (hash % 9000 + 1000).toString(); // 1000–9999
+
+    // Store mapping locally
+    localStorage.setItem("cw_code_" + code, nick);
+
+    codeOut.textContent =
+      "Code: " + code + "  (open /j?code=" + code + " on this device)";
+  });
+</script>
+</body>
 </html>
 
