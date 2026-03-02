@@ -89,20 +89,25 @@
 
   makeCode.addEventListener("click", () => {
     const nick = nickInput.value.trim();
-    if (!nick) return;
+    if (!nick) {
+      codeOut.textContent = "Please enter a nickname first.";
+      return;
+    }
 
     // Deterministic 4‑digit hash
     let hash = 0;
     for (let i = 0; i < nick.length; i++) {
       hash = (hash * 31 + nick.charCodeAt(i)) >>> 0;
     }
-    const code = (hash % 9000 + 1000).toString(); // 1000–9999
+    const code = (hash % 9000 + 1000).toString(); // always 1000–9999
 
-    // Store mapping locally
+    // Store mapping locally on THIS device
     localStorage.setItem("cw_code_" + code, nick);
 
     codeOut.textContent =
-      "Code: " + code + "  (open /j?code=" + code + " on this device)";
+      "Generated code: " + code +
+      "\nOpen: https://trancer1994.github.io/j?code=" + code +
+      "\n(This only works on THIS device)";
   });
 </script>
 </body>
