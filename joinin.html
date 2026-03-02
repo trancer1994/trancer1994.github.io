@@ -424,7 +424,7 @@ window.addEventListener("DOMContentLoaded", () => {
       return urlNick.trim();
     }
 
-// 3. Numeric code (?code=1234)
+// Numeric code (?code=1234)
 const code = params.get("code");
 if (code) {
   const mapped = localStorage.getItem("cw_code_" + code);
