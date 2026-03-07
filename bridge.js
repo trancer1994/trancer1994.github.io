@@ -9,6 +9,7 @@ class BridgeAdapter {
     this.channels = [];
     this.users = [];
     this.currentChannel = { name: "/", path: "/" };
+this.asyncMessages = [];
 
     // Credentials from HTML config
     this.username = window._ttUsername || "WebClient";
@@ -243,6 +244,15 @@ case "tt-user-list-full":      // keep legacy support
         this.emit("channel-changed");
         break;
 
+ case "cw-async":
+  // Store async message (optional but recommended)
+  if (!this.asyncMessages) this.asyncMessages = [];
+  this.asyncMessages.push(data);
+
+  // Notify UI
+  this.emit("async-message", data);
+  break;
+ 
       default:
         this.emit("message", data);
         break;
@@ -293,6 +303,9 @@ async getChannels() {
     return this.currentChannel;
   }
 
+async getAsyncMessages() {
+  return this.asyncMessages;
+}
   joinChannel(id) {
     const ch = this.channels.find(c => c.id === id);
     const path = ch ? ch.path : "/";
@@ -310,7 +323,22 @@ async getChannels() {
     }));
   }
 
-  /* -------------------------------------------------------
+ sendAsync(text) {
+  this.ws.send(JSON.stringify({
+    type: "cw-async",
+    text,
+    timestamp: Date.now()
+  }));
+}
+
+sendMessage(text, mode = "live") {
+  if (mode === "async") {
+    this.sendAsync(text);
+  } else {
+    this.sendChat(text);
+  }
+}
+/* -------------------------------------------------------
      AAC UI wrappers
      ------------------------------------------------------- */
   async connectEverything() {
