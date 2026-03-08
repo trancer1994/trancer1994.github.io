@@ -216,6 +216,20 @@
       height: auto;
     }
   }
+.mode-btn {
+  padding: 8px 14px;
+  margin: 4px;
+  border-radius: 6px;
+  border: 1px solid #888;
+  background: #eee;
+  font-size: 1rem;
+}
+
+.mode-btn.active {
+  background: #4caf50;
+  color: white;
+  border-color: #4caf50;
+}
 </style>
 </head>
 <body>
@@ -336,6 +350,21 @@
       </button>
     </div>
 
+ <div id="async-thread" style="
+  display: none;
+  border: 1px solid #ccc;
+  padding: 10px;
+  margin: 10px;
+  height: 200px;
+  overflow-y: auto;
+  background: #fafafa;
+  border-radius: 6px;
+"></div>
+
+<div id="async-input-area" style="display: none; margin: 10px;">
+  <input id="async-input" type="text" style="width: 70%; padding: 8px;">
+  <button id="async-send">Send</button>
+</div>
     <div id="conversation-memory"
          aria-label="Conversation memory"
          role="region">
@@ -401,8 +430,6 @@ function updateReadyStatus(isReady) {
   window._ttUsername = "admin";
   window._ttPassword = "admin";
 </script>
-<script src="bridge.js"></script>
-
 <script src="bridge.js"></script>
 
 <script>
@@ -656,19 +683,55 @@ bridge.on("disconnected", () => {
   window.addEventListener("load", startPolling);
   window.addEventListener("beforeunload", stopPolling);
 
+ let currentMode = "live";
 
-  /* ---------------------------------------------------------
-     9. LEGACY API WRAPPERS
-     --------------------------------------------------------- */
-window.connectWithNickname = () => { … }
-  window.disconnectEverything = () => bridge.disconnectEverything();
-  window.sendChat = (text) => bridge.sendChat(text);
-  window.joinChannel = (id) => bridge.joinChannel(id);
-  window.getChannels = () => bridge.getChannels();
-  window.getUsers = () => bridge.getUsers();
-  window.getCurrentChannel = () => bridge.getCurrentChannel();
+  const liveBtn = document.getElementById("mode-live");
+  const asyncBtn = document.getElementById("mode-async");
 
+  const asyncThread = document.getElementById("async-thread");
+  const asyncInputArea = document.getElementById("async-input-area");
+
+  function updateModeUI() {
+    if (currentMode === "live") {
+      liveBtn.classList.add("active");
+      asyncBtn.classList.remove("active");
+      asyncThread.style.display = "none";
+      asyncInputArea.style.display = "none";
+    } else {
+      liveBtn.classList.remove("active");
+      asyncBtn.classList.add("active");
+      asyncThread.style.display = "block";
+      asyncInputArea.style.display = "block";
+    }
+  }
+
+  liveBtn.onclick = () => { currentMode = "live"; updateModeUI(); };
+  asyncBtn.onclick = () => { currentMode = "async"; updateModeUI(); };
+
+  document.getElementById("async-send").onclick = () => {
+    const text = document.getElementById("async-input").value.trim();
+    if (!text) return;
+    bridge.sendMessage(text, "async");
+    document.getElementById("async-input").value = "";
+  };
+
+  bridge.on("async-message", (msg) => {
+    const div = document.createElement("div");
+    div.textContent = `${new Date(msg.timestamp).toLocaleTimeString()} — ${msg.text}`;
+    asyncThread.appendChild(div);
+    asyncThread.scrollTop = asyncThread.scrollHeight;
+  });
+
+bridge.getAsyncMessages().then(messages => {
+  messages.forEach(msg => {
+    const div = document.createElement("div");
+    div.textContent = `${new Date(msg.timestamp).toLocaleTimeString()} — ${msg.text}`;
+    asyncThread.appendChild(div);
+  });
 });
+
+/* ⭐ Close DOMContentLoaded ⭐ */
+}); 
 </script>
 </body>
 </html>
