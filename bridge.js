@@ -9,7 +9,7 @@ class BridgeAdapter {
     this.channels = [];
     this.users = [];
     this.currentChannel = { name: "/", path: "/" };
-this.asyncMessages = [];
+    this.asyncMessages = [];
 
     // Credentials from HTML config
     this.username = window._ttUsername || "WebClient";
@@ -117,7 +117,7 @@ this.asyncMessages = [];
             username: this.username
           }));
 
-          // TeamTalk login request (now with nickname)
+          // TeamTalk login request
           this.ws.send(JSON.stringify({
             type: "tt-connect",
             host: window._ttHost || "localhost",
@@ -198,7 +198,6 @@ this.asyncMessages = [];
     if (!data || !data.type) return;
 
     switch (data.type) {
-
       case "presence-join":
         if (this.joinTone) this.joinTone.play();
         this.vibrate([40, 40, 40]);
@@ -224,17 +223,17 @@ this.asyncMessages = [];
         this.handleTTStatus(data);
         break;
 
- case "tt-channel-list":
-case "tt-channel-list-full":   // keep legacy support
-  this.channels = data.channels || [];
-  this.emit("channel-added");
-  break;
+      case "tt-channel-list":
+      case "tt-channel-list-full":
+        this.channels = data.channels || [];
+        this.emit("channel-added");
+        break;
 
-case "tt-user-list":
-case "tt-user-list-full":      // keep legacy support
-  this.users = data.users || [];
-  this.emit("user-connected");
-  break;
+      case "tt-user-list":
+      case "tt-user-list-full":
+        this.users = data.users || [];
+        this.emit("user-connected");
+        break;
 
       case "tt-current-channel":
         this.currentChannel = {
@@ -244,54 +243,63 @@ case "tt-user-list-full":      // keep legacy support
         this.emit("channel-changed");
         break;
 
- case "cw-async":
-  // Store async message (optional but recommended)
-  if (!this.asyncMessages) this.asyncMessages = [];
-  this.asyncMessages.push(data);
+      case "cw-async":
+        if (!this.asyncMessages) this.asyncMessages = [];
+        this.asyncMessages.push(data);
+        this.emit("async-message", data);
+        break;
 
-  // Notify UI
-  this.emit("async-message", data);
-  break;
- 
+      case "tt-chat":
+        this.emit("chat-message", {
+          type: "live_text",
+          text: data.text || "",
+          user: data.user || data.nickname || "Someone",
+          timestamp: data.timestamp || Date.now()
+        });
+        break;
+
       default:
         this.emit("message", data);
         break;
     }
   }
 
-handleTTStatus(data) {
-  switch (data.phase) {
+  handleTTStatus(data) {
+    switch (data.phase) {
+      case "received":
+      case "login-sent":
+      case "server-message":
+      case "connecting":
+      case "authenticating":
+        break;
 
-    case "received":
-    case "login-sent":
-    case "server-message":
-    case "connecting":
-    case "authenticating":
-      break;
+      case "connected":
+        this.ttStatus.textContent = "TeamTalk: 🟢 Connected";
+        if (this.ttConnectTone) this.ttConnectTone.play();
+        this.vibrate([80, 40, 80]);
+        updateReadyStatus(true);
+        this.emit("tt-connected");
+        break;
 
-    case "connected":
-      this.ttStatus.textContent = "TeamTalk: 🟢 Connected";
-      if (this.ttConnectTone) this.ttConnectTone.play();
-      this.vibrate([80, 40, 80]);
-      updateReadyStatus(true);
-      this.emit("tt-connected");
-      break;
+      case "failed":
+        this.ttStatus.textContent = "TeamTalk: 🔴 Failed";
+        this.showError("TeamTalk connection failed.");
+        updateReadyStatus(false);
+        break;
 
-    case "failed":
-      this.ttStatus.textContent = "TeamTalk: 🔴 Failed";
-      this.showError("TeamTalk connection failed.");
-      updateReadyStatus(false);
-      break;
-
-    case "disconnected":
-      this.ttStatus.textContent = "TeamTalk: 🔴 Disconnected";
-      if (this.ttDisconnectTone) this.ttDisconnectTone.play();
-      this.vibrate([120]);
-      updateReadyStatus(false);
-      break;
+      case "disconnected":
+        this.ttStatus.textContent = "TeamTalk: 🔴 Disconnected";
+        if (this.ttDisconnectTone) this.ttDisconnectTone.play();
+        this.vibrate([120]);
+        updateReadyStatus(false);
+        break;
+    }
   }
-}
-async getChannels() {
+
+  /* -------------------------------------------------------
+     TeamTalk + async primitives
+     ------------------------------------------------------- */
+  async getChannels() {
     return this.channels;
   }
 
@@ -303,9 +311,10 @@ async getChannels() {
     return this.currentChannel;
   }
 
-async getAsyncMessages() {
-  return this.asyncMessages;
-}
+  async getAsyncMessages() {
+    return this.asyncMessages;
+  }
+
   joinChannel(id) {
     const ch = this.channels.find(c => c.id === id);
     const path = ch ? ch.path : "/";
@@ -323,22 +332,83 @@ async getAsyncMessages() {
     }));
   }
 
- sendAsync(text) {
-  this.ws.send(JSON.stringify({
-    type: "cw-async",
-    text,
-    timestamp: Date.now()
-  }));
-}
-
-sendMessage(text, mode = "live") {
-  if (mode === "async") {
-    this.sendAsync(text);
-  } else {
-    this.sendChat(text);
+  sendAsync(text) {
+    this.ws.send(JSON.stringify({
+      type: "cw-async",
+      text,
+      timestamp: Date.now()
+    }));
   }
-}
-/* -------------------------------------------------------
+
+  // Explicit override: caller chooses async vs live
+  sendMessage(text, mode = "live") {
+    if (mode === "async") {
+      this.sendAsync(text);
+    } else {
+      this.sendChat(text);
+    }
+  }
+
+  /* -------------------------------------------------------
+     Automation: system decides async vs live
+     ------------------------------------------------------- */
+  isLiveContext() {
+    const ttConnected =
+      this.ttStatus && this.ttStatus.textContent.includes("🟢");
+    const othersPresent = (this.users || []).length > 0;
+    return ttConnected && othersPresent;
+  }
+
+  autoSend(text) {
+    const mode = this.isLiveContext() ? "live" : "async";
+    this.sendMessage(text, mode);
+    return mode;
+  }
+
+  /* -------------------------------------------------------
+     AAC: symbols + dwell (AAC‑side only)
+     ------------------------------------------------------- */
+  sendSymbolTap(symbolId, label, source = "tap") {
+    const event = {
+      type: "symbol_tap",
+      symbolId,
+      label,
+      source,
+      timestamp: Date.now()
+    };
+    this.emit("symbol-tap", event);
+
+    const text = label || symbolId;
+    const mode = this.autoSend(text);
+    this.emit("symbol-tap-sent", { ...event, mode });
+  }
+
+  sendDwellSymbol(symbolId, label) {
+    this.sendSymbolTap(symbolId, label, "dwell");
+  }
+
+  /* -------------------------------------------------------
+     Live audio → TeamTalk
+     ------------------------------------------------------- */
+  startLiveAudioSession() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({ type: "cw-live-audio-start" }));
+  }
+
+  stopLiveAudioSession() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({ type: "cw-live-audio-stop" }));
+  }
+
+  sendLiveAudioChunk(base64Data) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({
+      type: "cw-live-audio-chunk",
+      data: base64Data
+    }));
+  }
+
+  /* -------------------------------------------------------
      AAC UI wrappers
      ------------------------------------------------------- */
   async connectEverything() {
@@ -358,7 +428,4 @@ sendMessage(text, mode = "live") {
   }
 }
 
-/* ---------------------------------------------------------
-   Export instance
-   --------------------------------------------------------- */
 const bridge = new BridgeAdapter();
