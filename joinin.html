@@ -338,17 +338,29 @@
       <p>Tap “Connect” to connect to the bridge and TeamTalk.</p>
     </div>
 
-    <div id="input-area">
-      <input id="chat-input"
-             type="text"
-             placeholder="Type your message…"
-             aria-label="Chat message"
-             onkeydown="if(event.key==='Enter'){ sendTeamTalkChat(); }">
-      <button id="send-btn"
-              onclick="sendTeamTalkChat()">
-        Send
-      </button>
-    </div>
+ <div id="input-area">
+  <input id="chat-input" type="text" placeholder="Type a message…">
+
+  <button onclick="sendTeamTalkChat()">Send</button>
+
+  <div id="mode-status"
+       aria-live="polite"
+       style="font-size: 0.9rem; margin-top: 0.25rem;">
+    Messages will be sent in the mode the system thinks is least effort.
+  </div>
+
+ <button id="toggle-speech-button"
+        aria-pressed="false"
+        onclick="toggleSpeech()"
+        style="margin-top: 0.5rem;">
+  Toggle Speech
+</button>
+ <button id="ptt-button"
+          aria-pressed="false"
+          style="margin-top: 0.5rem;">
+    Hold to talk
+  </button>
+</div>
 
  <div id="async-thread" style="
   display: none;
@@ -433,7 +445,168 @@ function updateReadyStatus(isReady) {
 <script src="bridge.js"></script>
 
 <script>
-window.addEventListener("DOMContentLoaded", () => {
+
+  <script>
+  // -------------------------------
+  // Text send with automation
+  // -------------------------------
+  window.sendTeamTalkChat = function () {
+    const input = document.getElementById("chat-input");
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+
+    const modeUsed = bridge.autoSend(text);
+
+    const modeStatus = document.getElementById("mode-status");
+    if (modeStatus) {
+      modeStatus.textContent =
+        modeUsed === "live"
+          ? "Sent as live message"
+          : "Sent as async message";
+    }
+
+    input.value = "";
+  };
+
+  // -------------------------------
+  // Render live and async streams
+  // -------------------------------
+  bridge.on("chat-message", (msg) => {
+    const chat = document.getElementById("chat");
+    if (!chat) return;
+    const p = document.createElement("p");
+    p.textContent = `${msg.user}: ${msg.text}`;
+    chat.appendChild(p);
+    chat.scrollTop = chat.scrollHeight;
+  });
+
+  bridge.on("async-message", (msg) => {
+    const asyncThread = document.getElementById("async-thread");
+    if (!asyncThread) return;
+    const div = document.createElement("div");
+    const time = new Date(msg.timestamp || Date.now()).toLocaleTimeString();
+    div.textContent = `${time} — ${msg.text}`;
+    asyncThread.appendChild(div);
+    asyncThread.scrollTop = asyncThread.scrollHeight;
+  });
+
+  // -------------------------------
+  // Dwell helper for symbols
+  // -------------------------------
+  function attachDwell(element, symbolId, label) {
+    let dwellTimer = null;
+    const DWELL_MS = 800; // tune this
+
+    element.addEventListener("pointerdown", () => {
+      dwellTimer = setTimeout(() => {
+        bridge.sendDwellSymbol(symbolId, label);
+      }, DWELL_MS);
+    });
+
+    const cancel = () => {
+      if (dwellTimer) {
+        clearTimeout(dwellTimer);
+        dwellTimer = null;
+      }
+    };
+
+    element.addEventListener("pointerup", cancel);
+    element.addEventListener("pointerleave", cancel);
+  }
+
+  // You can call attachDwell(buttonEl, symbolId, label) when creating symbol buttons.
+
+  // -------------------------------
+  // Mic capture + PTT for live audio
+  // -------------------------------
+  let mediaStream = null;
+  let mediaRecorder = null;
+  let isRecording = false;
+
+  async function initMic() {
+    if (mediaStream) return;
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      console.error("Mic error:", err);
+      alert("Could not access microphone.");
+    }
+  }
+
+  function startLiveAudio() {
+    if (isRecording) return;
+    if (!mediaStream) {
+      initMic().then(() => {
+        if (mediaStream) startLiveAudio();
+      });
+      return;
+    }
+
+    mediaRecorder = new MediaRecorder(mediaStream, {
+      mimeType: "audio/webm;codecs=opus"
+    });
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (!e.data || !e.data.size) return;
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64Data = btoa(
+          String.fromCharCode(...new Uint8Array(reader.result))
+        );
+        bridge.sendLiveAudioChunk(base64Data);
+      };
+      reader.readAsArrayBuffer(e.data);
+    };
+
+    mediaRecorder.start(250); // send chunk every 250ms
+    bridge.startLiveAudioSession();
+    isRecording = true;
+  }
+
+  function stopLiveAudio() {
+    if (!isRecording) return;
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.stop();
+    }
+    bridge.stopLiveAudioSession();
+    isRecording = false;
+  }
+
+  const pttButton = document.getElementById("ptt-button");
+  if (pttButton) {
+    pttButton.addEventListener("pointerdown", () => {
+      pttButton.setAttribute("aria-pressed", "true");
+      startLiveAudio();
+    });
+
+    const stop = () => {
+      pttButton.setAttribute("aria-pressed", "false");
+      stopLiveAudio();
+    };
+
+    pttButton.addEventListener("pointerup", stop);
+    pttButton.addEventListener("pointerleave", stop);
+  let isSpeechToggled = false;
+
+function toggleSpeech() {
+  if (!isSpeechToggled) {
+    // Turn ON continuous transmit
+    isSpeechToggled = true;
+    startLiveAudio();
+    const btn = document.getElementById("toggle-speech-button");
+    if (btn) btn.setAttribute("aria-pressed", "true");
+  } else {
+    // Turn OFF continuous transmit
+    isSpeechToggled = false;
+    stopLiveAudio();
+    const btn = document.getElementById("toggle-speech-button");
+    if (btn) btn.setAttribute("aria-pressed", "false");
+  }
+}
+</script>
+
+  window.addEventListener("DOMContentLoaded", () => {
 
    /* ---------------------------------------------------------
      NICKNAME RESOLUTION MODULE
