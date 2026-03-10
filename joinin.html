@@ -446,10 +446,6 @@ function updateReadyStatus(isReady) {
 
 <script>
 
-  <script>
-  // -------------------------------
-  // Text send with automation
-  // -------------------------------
   window.sendTeamTalkChat = function () {
     const input = document.getElementById("chat-input");
     if (!input) return;
@@ -469,9 +465,7 @@ function updateReadyStatus(isReady) {
     input.value = "";
   };
 
-  // -------------------------------
-  // Render live and async streams
-  // -------------------------------
+
   bridge.on("chat-message", (msg) => {
     const chat = document.getElementById("chat");
     if (!chat) return;
@@ -491,9 +485,6 @@ function updateReadyStatus(isReady) {
     asyncThread.scrollTop = asyncThread.scrollHeight;
   });
 
-  // -------------------------------
-  // Dwell helper for symbols
-  // -------------------------------
   function attachDwell(element, symbolId, label) {
     let dwellTimer = null;
     const DWELL_MS = 800; // tune this
@@ -515,11 +506,6 @@ function updateReadyStatus(isReady) {
     element.addEventListener("pointerleave", cancel);
   }
 
-  // You can call attachDwell(buttonEl, symbolId, label) when creating symbol buttons.
-
-  // -------------------------------
-  // Mic capture + PTT for live audio
-  // -------------------------------
   let mediaStream = null;
   let mediaRecorder = null;
   let isRecording = false;
@@ -591,13 +577,11 @@ function updateReadyStatus(isReady) {
 
 function toggleSpeech() {
   if (!isSpeechToggled) {
-    // Turn ON continuous transmit
     isSpeechToggled = true;
     startLiveAudio();
     const btn = document.getElementById("toggle-speech-button");
     if (btn) btn.setAttribute("aria-pressed", "true");
   } else {
-    // Turn OFF continuous transmit
     isSpeechToggled = false;
     stopLiveAudio();
     const btn = document.getElementById("toggle-speech-button");
@@ -606,12 +590,9 @@ function toggleSpeech() {
 }
 </script>
 
- <script>
+<script>
    window.addEventListener("DOMContentLoaded", () => {
 
-   /* ---------------------------------------------------------
-     NICKNAME RESOLUTION MODULE
-     --------------------------------------------------------- */
   function resolveNickname() {
     // 1. TeamTalk nickname (if bridge exposes it)
     const ttNick = bridge?.getMyNickname?.();
@@ -634,11 +615,9 @@ if (code) {
     return mapped.trim();
   }
 }
-    // 3. Local storage
     const lsNick = localStorage.getItem("cw_nickname");
     if (lsNick && lsNick.trim()) return lsNick.trim();
 
-    // 4. Fallback
     return "Guest";
   }
 function flashNickname(nick) {
@@ -655,18 +634,12 @@ function flashNickname(nick) {
 
   setTimeout(() => p.remove(), 4000);
 }
-/* ---------------------------------------------------------
-   CONNECT WRAPPER (inject nickname)
-   --------------------------------------------------------- */
 window.connectWithNickname = () => {
   const nickname = resolveNickname();
   bridge.username = nickname;
   flashNickname(nickname);
   bridge.connectEverything();
 };
-/* ---------------------------------------------------------
-   1. CONNECTION BUTTON
-   --------------------------------------------------------- */
 function updateConnectionButton(isConnected) {
   const connectBtn = document.getElementById("connect-btn");
   const disconnectBtn = document.getElementById("disconnect-btn");
@@ -689,9 +662,6 @@ bridge.on("disconnected", () => {
 });
 
 
-  /* ---------------------------------------------------------
-     2. PRESENCE LOG
-     --------------------------------------------------------- */
   function logPresence(text) {
     const chat = document.getElementById("chat");
     const p = document.createElement("p");
@@ -703,9 +673,6 @@ bridge.on("disconnected", () => {
   }
 
 
-  /* ---------------------------------------------------------
-     3. CENTRAL REFRESH FUNCTION
-     --------------------------------------------------------- */
   async function refreshUI() {
     try {
       const channels = await bridge.getChannels();
@@ -721,10 +688,6 @@ bridge.on("disconnected", () => {
     }
   }
 
-
-  /* ---------------------------------------------------------
-     4. DOM UPDATE HELPERS
-     --------------------------------------------------------- */
   function updateChannelList(channels) {
     const ul = document.getElementById("channel-list");
     ul.innerHTML = "";
@@ -794,10 +757,6 @@ bridge.on("disconnected", () => {
     label.textContent = ch ? ch.name : "/";
   }
 
-
-  /* ---------------------------------------------------------
-     5. POLLING LOOP
-     --------------------------------------------------------- */
   let refreshInterval = null;
 
   function startPolling() {
@@ -809,10 +768,6 @@ bridge.on("disconnected", () => {
     if (refreshInterval) clearInterval(refreshInterval);
   }
 
-
-  /* ---------------------------------------------------------
-     6. VISIBILITY + BFCache FIXES
-     --------------------------------------------------------- */
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       refreshUI();
@@ -825,10 +780,6 @@ bridge.on("disconnected", () => {
     }
   });
 
-
-  /* ---------------------------------------------------------
-     7. BRIDGE EVENT HOOKS
-     --------------------------------------------------------- */
   bridge.on("connected", refreshUI);
   bridge.on("channel-added", refreshUI);
   bridge.on("channel-removed", refreshUI);
@@ -851,9 +802,6 @@ bridge.on("disconnected", () => {
   });
 
 
-  /* ---------------------------------------------------------
-     8. START EVERYTHING
-     --------------------------------------------------------- */
   window.addEventListener("load", startPolling);
   window.addEventListener("beforeunload", stopPolling);
 
@@ -902,7 +850,6 @@ bridge.getAsyncMessages().then(messages => {
     div.textContent = `${new Date(msg.timestamp).toLocaleTimeString()} — ${msg.text}`;
     asyncThread.appendChild(div);
   });
-});
 </script>
 </body>
 </html>
