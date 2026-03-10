@@ -565,8 +565,8 @@ function updateReadyStatus(isReady) {
       pttButton.setAttribute("aria-pressed", "true");
       startLiveAudio();
     });
-
-    const stop = () => {
+}
+  const stop = () => {
       pttButton.setAttribute("aria-pressed", "false");
       stopLiveAudio();
     };
@@ -850,6 +850,7 @@ bridge.getAsyncMessages().then(messages => {
     div.textContent = `${new Date(msg.timestamp).toLocaleTimeString()} — ${msg.text}`;
     asyncThread.appendChild(div);
   });
-</script>
+  });
+     </script>
 </body>
 </html>
