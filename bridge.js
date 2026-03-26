@@ -100,7 +100,7 @@ class BridgeAdapter {
         this.bridgeStatus.textContent = "Bridge: 🟡 Connecting…";
         updateReadyStatus(false);
 
-        this.ws = new WebSocket("wss://connectingworlds-bridge.onrender.com");
+        this.ws = new WebSocket("ws://localhost:8080");
 
         this.ws.onopen = () => {
           this.connected = true;
