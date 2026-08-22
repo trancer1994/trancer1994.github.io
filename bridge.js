@@ -1,6 +1,8 @@
 class BridgeAdapter {
   constructor() {
-    this.ws = null;
+ const BRIDGE_URL = window._bridgeUrl ||
+  "wss://connecting-worlds-bridge-xucno.ondigitalocean.app";
+   this.ws = null;
     this.handlers = {};
     this.connected = false;
     this.manualDisconnect = false;
@@ -93,86 +95,87 @@ class BridgeAdapter {
   /* -------------------------------------------------------
      WebSocket connection + auto‑reconnect
      ------------------------------------------------------- */
-  connect() {
-    return new Promise((resolve, reject) => {
-      try {
-        this.manualDisconnect = false;
-        this.bridgeStatus.textContent = "Bridge: 🟡 Connecting…";
+connect() {
+  return new Promise((resolve, reject) => {
+    try {
+      this.manualDisconnect = false;
+      this.bridgeStatus.textContent = "Bridge: 🟡 Connecting…";
+      updateReadyStatus(false);
+
+      const BRIDGE_URL = window._bridgeUrl ||
+        "wss://connecting-worlds-bridge-xucno.ondigitalocean.app";
+
+      this.ws = new WebSocket(BRIDGE_URL);
+
+      this.ws.onopen = () => {
+        this.connected = true;
+        this.reconnectAttempts = 0;
+        this.bridgeStatus.textContent = "Bridge: 🟢 Connected";
+        this.emit("connected");
+
+        this.ws.send(JSON.stringify({ type: "handshake" }));
+
+        this.ws.send(JSON.stringify({
+          type: "tt-identify",
+          username: this.username
+        }));
+
+        this.ws.send(JSON.stringify({
+          type: "tt-connect",
+          host: window._ttHost || "localhost",
+          port: window._ttPort || 10333,
+          username: this.username,
+          password: this.password,
+          nickname: this.username
+        }));
+
+        this.startKeepalive();
+        resolve();
+      };
+
+      this.ws.onclose = () => {
+        this.connected = false;
+        this.bridgeStatus.textContent = "Bridge: 🔴 Disconnected";
+        this.emit("disconnected");
+        this.stopKeepalive();
         updateReadyStatus(false);
 
-        this.ws = new WebSocket("ws://localhost:8080");
-
-        this.ws.onopen = () => {
-          this.connected = true;
-          this.reconnectAttempts = 0;
-          this.bridgeStatus.textContent = "Bridge: 🟢 Connected";
-          this.emit("connected");
-
-          // Initial handshake
-          this.ws.send(JSON.stringify({ type: "handshake" }));
-
-          // Identity announcement
-          this.ws.send(JSON.stringify({
-            type: "tt-identify",
-            username: this.username
-          }));
-
-          // TeamTalk login request
-          this.ws.send(JSON.stringify({
-            type: "tt-connect",
-            host: window._ttHost || "localhost",
-            port: window._ttPort || 10333,
-            username: this.username,
-            password: this.password,
-            nickname: this.username
-          }));
-
-          this.startKeepalive();
-          resolve();
-        };
-
-        this.ws.onclose = () => {
-          this.connected = false;
-          this.bridgeStatus.textContent = "Bridge: 🔴 Disconnected";
-          this.emit("disconnected");
-          this.stopKeepalive();
-          updateReadyStatus(false);
-
-          if (!this.manualDisconnect) {
-            if (this.reconnectAttempts < this.maxReconnectAttempts) {
-              this.reconnectAttempts++;
-              this.bridgeStatus.textContent = "Bridge: 🟡 Reconnecting…";
-              this.showError("Connection lost. Reconnecting…");
-              setTimeout(() => this.connect(), 3000);
-            } else {
-              this.bridgeStatus.textContent =
-                "Bridge: 🔴 Couldn’t reconnect. Tap Connect to try again.";
-              this.showError("Couldn’t reconnect. Tap Connect to try again.");
-            }
+        if (!this.manualDisconnect) {
+          if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.reconnectAttempts++;
+            this.bridgeStatus.textContent = "Bridge: 🟡 Reconnecting…";
+            this.showError("Connection lost. Reconnecting…");
+            setTimeout(() => this.connect(), 3000);
+          } else {
+            this.bridgeStatus.textContent =
+              "Bridge: 🔴 Couldn’t reconnect. Tap Connect to try again.";
+            this.showError("Couldn’t reconnect. Tap Connect to try again.");
           }
-        };
+        }
+      };
 
-        this.ws.onerror = (err) => {
-          console.error("WebSocket error:", err);
-          this.showError("Bridge error: " + err.message);
-          reject(err);
-        };
-
-        this.ws.onmessage = (msg) => {
-          let data;
-          try {
-            data = JSON.parse(msg.data);
-          } catch (e) {
-            console.error("Failed to parse message:", e);
-            return;
-          }
-          this.handleMessage(data);
-        };
-      } catch (err) {
+      this.ws.onerror = (err) => {
+        console.error("WebSocket error:", err);
+        this.showError("Bridge error: " + err.message);
         reject(err);
-      }
-    });
-  }
+      };
+
+      this.ws.onmessage = (msg) => {
+        let data;
+        try {
+          data = JSON.parse(msg.data);
+        } catch (e) {
+          console.error("Failed to parse message:", e);
+          return;
+        }
+        this.handleMessage(data);
+      };
+
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
 
   /* -------------------------------------------------------
      Keepalive pings
