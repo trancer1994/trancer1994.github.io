@@ -1,6 +1,6 @@
 class BridgeAdapter {
   constructor() {
- const BRIDGE_URL = window._bridgeUrl ||
+   this.bridgeUrl = window._bridgeUrl ||
   "wss://connecting-worlds-bridge-xucno.ondigitalocean.app";
    this.ws = null;
     this.handlers = {};
@@ -102,36 +102,35 @@ connect() {
       this.bridgeStatus.textContent = "Bridge: 🟡 Connecting…";
       updateReadyStatus(false);
 
-      const BRIDGE_URL = window._bridgeUrl ||
-        "wss://connecting-worlds-bridge-xucno.ondigitalocean.app";
+      this.ws = new WebSocket(this.bridgeUrl);
 
-      this.ws = new WebSocket(BRIDGE_URL);
+this.ws.onopen = () => {
+  this.connected = true;
+  this.reconnectAttempts = 0;
+  this.bridgeStatus.textContent = "Bridge: 🟢 Connected";
+  this.emit("connected");
 
-      this.ws.onopen = () => {
-        this.connected = true;
-        this.reconnectAttempts = 0;
-        this.bridgeStatus.textContent = "Bridge: 🟢 Connected";
-        this.emit("connected");
+  setTimeout(() => {
+    this.ws.send(JSON.stringify({ type: "handshake" }));
 
-        this.ws.send(JSON.stringify({ type: "handshake" }));
+    this.ws.send(JSON.stringify({
+      type: "tt-identify",
+      username: this.username
+    }));
 
-        this.ws.send(JSON.stringify({
-          type: "tt-identify",
-          username: this.username
-        }));
+    this.ws.send(JSON.stringify({
+      type: "tt-connect",
+      host: window._ttHost || "localhost",
+      port: window._ttPort || 10333,
+      username: this.username,
+      password: this.password,
+      nickname: this.username
+    }));
+  }, 50);
 
-        this.ws.send(JSON.stringify({
-          type: "tt-connect",
-          host: window._ttHost || "localhost",
-          port: window._ttPort || 10333,
-          username: this.username,
-          password: this.password,
-          nickname: this.username
-        }));
-
-        this.startKeepalive();
-        resolve();
-      };
+  this.startKeepalive();
+  resolve();
+};
 
       this.ws.onclose = () => {
         this.connected = false;
