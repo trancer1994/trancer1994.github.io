@@ -1,7 +1,7 @@
 class BridgeAdapter {
   constructor() {
    this.bridgeUrl = window._bridgeUrl ||
-  "wss://connecting-worlds-bridge-xucno.ondigitalocean.app";
+  "wss://104.248.118.243:8080";
    this.ws = null;
     this.handlers = {};
     this.connected = false;
