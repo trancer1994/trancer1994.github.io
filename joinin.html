@@ -434,14 +434,169 @@
 
 <!-- 5. INSTANTIATE BRIDGE -->
 <script>
+function updateReadyStatus(isReady) {
+  const el = document.getElementById("ready-status");
+  if (!el) return;
+  el.textContent = "Ready to send: " + (isReady ? "YES" : "NO");
+}
   const bridge = new BridgeAdapter();
 </script>
 
 <!-- 6. ALL UI LOGIC (your entire DOMContentLoaded block) -->
 <script>
-  window.addEventListener("DOMContentLoaded", () => {
-    /* your entire DOM listener block goes here exactly as-is */
+window.addEventListener("DOMContentLoaded", () => {
+
+  /* -----------------------------
+     BUTTON VISIBILITY / STATUS UI
+     ----------------------------- */
+
+  const connectBtn = document.getElementById("connect-btn");
+  const disconnectBtn = document.getElementById("disconnect-btn");
+  const bridgeStatus = document.getElementById("bridge-status");
+  const ttStatus = document.getElementById("tt-status");
+  const readyStatus = document.getElementById("ready-status");
+
+  function updateBridgeStatus(isConnected) {
+    bridgeStatus.textContent = "Bridge: " + (isConnected ? "🟢 Connected" : "🔴 Disconnected");
+  }
+
+  function updateTTStatus(isConnected) {
+    ttStatus.textContent = "TeamTalk: " + (isConnected ? "🟢 Connected" : "🔴 Disconnected");
+  }
+
+  /* -----------------------------
+     SOUND / PRESENCE / VIBRATION
+     ----------------------------- */
+
+  window.toggleSoundCues = () => {
+    bridge.soundEnabled = !bridge.soundEnabled;
+    document.getElementById("sound-toggle").ariaPressed = bridge.soundEnabled;
+  };
+
+  window.togglePresenceCues = () => {
+    bridge.presenceEnabled = !bridge.presenceEnabled;
+    document.getElementById("presence-toggle").ariaPressed = bridge.presenceEnabled;
+  };
+
+  window.toggleVibrationCues = () => {
+    bridge.vibrationEnabled = !bridge.vibrationEnabled;
+    document.getElementById("vibration-toggle").ariaPressed = bridge.vibrationEnabled;
+  };
+
+  /* -----------------------------
+     QUICK PHRASES
+     ----------------------------- */
+
+  window.sendQuickPhrase = (text) => {
+    bridge.sendTeamTalkText(text);
+    appendChat("[Quick] " + text);
+  };
+
+  /* -----------------------------
+     CHAT APPEND LOGIC
+     ----------------------------- */
+
+  const chat = document.getElementById("chat");
+
+  function appendChat(msg) {
+    const p = document.createElement("p");
+    p.textContent = msg;
+    chat.appendChild(p);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  /* -----------------------------
+     TEAMTALK CHAT SEND
+     ----------------------------- */
+
+  window.sendTeamTalkChat = () => {
+    const input = document.getElementById("chat-input");
+    const text = input.value.trim();
+    if (!text) return;
+    bridge.sendTeamTalkText(text);
+    appendChat("[You] " + text);
+    input.value = "";
+  };
+
+  /* -----------------------------
+     SPEECH TOGGLE
+     ----------------------------- */
+
+  window.toggleSpeech = () => {
+    bridge.speechEnabled = !bridge.speechEnabled;
+    document.getElementById("toggle-speech-button").ariaPressed = bridge.speechEnabled;
+  };
+
+  /* -----------------------------
+     PTT BUTTON (Hold to talk)
+     ----------------------------- */
+
+  const pttBtn = document.getElementById("ptt-button");
+
+  pttBtn.addEventListener("mousedown", () => bridge.startPTT());
+  pttBtn.addEventListener("mouseup", () => bridge.stopPTT());
+  pttBtn.addEventListener("touchstart", () => bridge.startPTT());
+  pttBtn.addEventListener("touchend", () => bridge.stopPTT());
+
+  /* -----------------------------
+     CONNECT / DISCONNECT BUTTONS
+     ----------------------------- */
+
+  window.connectWithNickname = () => {
+    const nickname = resolveNickname();
+    bridge.username = nickname;
+    flashNickname(nickname);
+    bridge.connectEverything();
+  };
+
+  bridge.on("bridge-connected", () => {
+    updateBridgeStatus(true);
+    connectBtn.style.display = "none";
+    disconnectBtn.style.display = "inline-block";
   });
+
+  bridge.on("bridge-disconnected", () => {
+    updateBridgeStatus(false);
+    connectBtn.style.display = "inline-block";
+    disconnectBtn.style.display = "none";
+  });
+
+  bridge.on("tt-connected", () => updateTTStatus(true));
+  bridge.on("tt-disconnected", () => updateTTStatus(false));
+
+  /* -----------------------------
+     CHANNEL + USER LIST UPDATES
+     ----------------------------- */
+
+  bridge.on("channels-updated", (channels) => {
+    const ul = document.getElementById("channel-list");
+    ul.innerHTML = "";
+    channels.forEach(ch => {
+      const li = document.createElement("li");
+      li.textContent = ch.name;
+      ul.appendChild(li);
+    });
+  });
+
+  bridge.on("users-updated", (users) => {
+    const ul = document.getElementById("user-list");
+    ul.innerHTML = "";
+    users.forEach(u => {
+      const li = document.createElement("li");
+      li.textContent = u.nickname;
+      ul.appendChild(li);
+    });
+  });
+
+  /* -----------------------------
+     READY STATUS
+     ----------------------------- */
+
+  bridge.on("ready-status", (isReady) => {
+    readyStatus.textContent = "Ready to send: " + (isReady ? "YES" : "NO");
+  });
+
+});
 </script>
 
 <!-- 7. SPEECH HELPER -->
